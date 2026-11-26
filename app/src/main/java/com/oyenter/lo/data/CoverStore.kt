@@ -4,56 +4,64 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
+import android.net.Uri
 import android.util.LruCache
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.FileProvider
 import java.io.File
 
-/** Обложки: встроенные в теги, с дисковым и памяти-кэшем. */
+/**
+ * Обложки: только картинка, встроенная в конкретный файл.
+ *
+ * Раньше кэш группировался по albumId, и все треки «одного альбома» без своей
+ * обложки получали чужую картинку. Теперь ключ — всегда id трека: нет в файле
+ * встроенной обложки — нет обложки. Никаких заимствований.
+ */
 object CoverStore {
 
     /** Меняется при сбросе кэша — Compose перечитывает обложки. */
     var version: Int by mutableIntStateOf(0)
         private set
 
-    private val cache = object : LruCache<String, Bitmap>(28) {
+    private const val PREFIX = "c1_"
+
+    private val cache = object : LruCache<String, Bitmap>(64) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount / 1024
     }
 
-    /**
-     * Ключ обложки: альбом, только если он реально известен.
-     * Иначе — сам трек, иначе все «Unknown album» получают одну чужую картинку.
-     */
-    private fun keyOf(track: Track): String {
-        val album = track.album.trim()
-        val unknown = album.isEmpty() ||
-            album.equals("<unknown>", ignoreCase = true) ||
-            album.equals("unknown", ignoreCase = true) ||
-            album.equals("неизвестный альбом", ignoreCase = true)
-        return if (track.albumId > 0 && !unknown) "a${track.albumId}" else "t${track.id}"
-    }
+    private fun keyOf(track: Track): String = "$PREFIX${track.id}"
+
+    private fun coverFile(ctx: Context, track: Track): File =
+        File(File(ctx.cacheDir, "covers").apply { mkdirs() }, "${keyOf(track)}.img")
 
     @Synchronized
     fun load(ctx: Context, track: Track): Bitmap? {
         val key = keyOf(track)
         cache.get(key)?.let { return it }
-        val dir = File(ctx.cacheDir, "covers").apply { mkdirs() }
-        val file = File(dir, "$key.img")
-        val bitmap = when {
-            file.exists() -> decodeFile(file) ?: extract(track)?.also { save(it, file) }
-            else -> extract(track)?.also { save(it, file) }
+        val file = coverFile(ctx, track)
+        val bitmap = if (file.exists()) {
+            decodeFile(file) ?: extract(track)?.also { save(it, file) }
+        } else {
+            extract(track)?.also { save(it, file) }
         }
         if (bitmap != null) cache.put(key, bitmap)
         return bitmap
     }
 
-    /** Сбрасывает кэш конкретного трека — если картинка оказалась чужой. */
+    /** URI уже готовой обложки — для нотификации. Null, если картинки нет. */
+    fun artworkUri(ctx: Context, track: Track): Uri? = runCatching {
+        val file = coverFile(ctx, track)
+        if (!file.exists() || file.length() == 0L) return null
+        FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+    }.getOrNull()
+
+    /** Сбрасывает кэш конкретного трека. */
     @Synchronized
     fun invalidate(ctx: Context, track: Track) {
-        val key = keyOf(track)
-        cache.remove(key)
-        runCatching { File(File(ctx.cacheDir, "covers"), "$key.img").delete() }
+        cache.remove(keyOf(track))
+        runCatching { coverFile(ctx, track).delete() }
     }
 
     private fun decodeFile(file: File): Bitmap? =
@@ -72,10 +80,12 @@ object CoverStore {
     }
 
     private fun extractFrom(source: String): Bitmap? {
+        if (source.isBlank()) return null
         val mmr = MediaMetadataRetriever()
         return try {
             mmr.setDataSource(source)
             val bytes = mmr.embeddedPicture ?: return null
+            if (bytes.isEmpty()) return null
             val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
             BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
             val largest = maxOf(bounds.outWidth, bounds.outHeight)
@@ -104,12 +114,11 @@ object CoverStore {
         version++
     }
 
-    /** Убирает файлы старой схемы ключей (просто числа), чтобы не подмешивались чужие картинки. */
+    /** Удаляет файлы старых схем (albumId / trackId без префикса), чтобы старые чужие картинки не всплывали. */
     fun migrateLegacy(ctx: Context) {
         runCatching {
             File(ctx.cacheDir, "covers").listFiles()?.forEach { file ->
-                val name = file.name
-                if (!name.startsWith("a") && !name.startsWith("t")) file.delete()
+                if (!file.name.startsWith(PREFIX)) file.delete()
             }
         }
     }

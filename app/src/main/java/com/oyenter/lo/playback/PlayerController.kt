@@ -2,16 +2,15 @@ package com.oyenter.lo.playback
 
 import android.content.ComponentName
 import android.content.Context
-import android.net.Uri
 import android.os.Bundle
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.oyenter.lo.data.CoverStore
 import com.oyenter.lo.data.PlayerUiState
 import com.oyenter.lo.data.Prefs
 import com.oyenter.lo.data.QueueItem
@@ -347,7 +346,7 @@ class PlayerController(private val app: Context) {
             .setTitle(title)
             .setArtist(artist)
             .setAlbumTitle(album)
-            .setArtworkUri(albumArtUri(albumId))
+            .setArtworkUri(CoverStore.artworkUri(app, this))
             .setExtras(extras)
             .build()
         return MediaItem.Builder()
@@ -368,10 +367,5 @@ class PlayerController(private val app: Context) {
             albumId = extras?.getLong("albumId") ?: 0L,
             durationMs = extras?.getLong("duration") ?: 0L,
         )
-    }
-
-    private fun albumArtUri(albumId: Long): Uri? {
-        if (albumId <= 0) return null
-        return "content://media/external/audio/albumart/$albumId".toUri()
     }
 }

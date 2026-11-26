@@ -93,6 +93,32 @@ class LoDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "lo.
         return changed
     }
 
+    /** Записывает только изменившиеся треки и удаляет пропавшие. */
+    fun applyDelta(changed: List<Track>, deleted: Set<Long>) {
+        if (changed.isEmpty() && deleted.isEmpty()) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            changed.forEach { fresh ->
+                val old = track(fresh.id)
+                val merged = if (old == null) fresh else fresh.copy(
+                    playCount = old.playCount,
+                    lastPlayed = old.lastPlayed,
+                    favorite = old.favorite,
+                    hidden = old.hidden,
+                    positionMs = old.positionMs,
+                )
+                db.insertWithOnConflict("tracks", null, merged.toValues(), SQLiteDatabase.CONFLICT_REPLACE)
+            }
+            deleted.chunked(400).forEach { chunk ->
+                db.delete("tracks", "id IN (${chunk.joinToString(",")})", null)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     fun setHidden(id: Long, hidden: Boolean) {
         val cv = ContentValues().apply { put("hidden", if (hidden) 1 else 0) }
         writableDatabase.update("tracks", cv, "id=?", arrayOf(id.toString()))

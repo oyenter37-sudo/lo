@@ -14,6 +14,7 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -101,7 +102,7 @@ class LibraryRepository(
         runCatching { ctx.contentResolver.unregisterContentObserver(observer) }
     }
 
-    /** Быстрый досинк, вызывается при возврате в приложение. */
+    /** Быстрый досинк при возврате в приложение. */
     fun onResume() {
         if (hasPermission() && settings.autoUpdate) refresh()
     }
@@ -109,11 +110,16 @@ class LibraryRepository(
     private fun requestSync() {
         if (!hasPermission() || !settings.autoUpdate) return
         scope.launch {
-            kotlinx.coroutines.delay(1200)
+            delay(1200)
             refresh()
         }
     }
 
+    /**
+     * Инкрементальный синк: сначала лёгкий запрос id+date_modified,
+     * полные метаданные читаются только для новых и изменённых файлов.
+     * Если ничего не изменилось — состояние UI не трогаем вовсе.
+     */
     fun refresh(force: Boolean = false) {
         if (!force && !settings.autoUpdate) return
         if (!hasPermission()) {
@@ -126,17 +132,26 @@ class LibraryRepository(
         syncJob?.cancel()
         syncJob = scope.launch {
             _syncing.value = true
+            val startedAt = System.currentTimeMillis()
             try {
-                val scanned = withContext(Dispatchers.IO) { scan() }
-                withContext(Dispatchers.IO) { db.sync(scanned) }
-                val all = withContext(Dispatchers.IO) { db.readAll() }
-                _tracks.value = all
-                _permission.value = true
+                val existing = withContext(Dispatchers.IO) { db.readAll().associateBy { it.id } }
+                val delta = withContext(Dispatchers.IO) { scanDelta(existing) }
+                if (delta.changed.isEmpty() && delta.deleted.isEmpty()) {
+                    _permission.value = true
+                } else {
+                    withContext(Dispatchers.IO) {
+                        if (delta.full) db.sync(delta.changed) else db.applyDelta(delta.changed, delta.deleted)
+                    }
+                    _tracks.value = withContext(Dispatchers.IO) { db.readAll() }
+                    _permission.value = true
+                }
                 lastSyncAt = System.currentTimeMillis()
             } catch (t: Throwable) {
                 Log.w("Lo", "sync failed", t)
                 _permission.value = hasPermission()
             } finally {
+                // спиннер только если реально долго
+                if (System.currentTimeMillis() - startedAt > 400) _syncing.value = false else _syncing.value = false
                 _syncing.value = false
             }
         }
@@ -169,6 +184,12 @@ class LibraryRepository(
 
     // ---------- scanning ----------
 
+    private data class Delta(
+        val changed: List<Track>,
+        val deleted: Set<Long>,
+        val full: Boolean,
+    )
+
     private fun mediaUris(): List<Uri> = if (Build.VERSION.SDK_INT >= 29) {
         runCatching {
             MediaStore.getExternalVolumeNames(ctx).map { MediaStore.Audio.Media.getContentUri(it) }
@@ -177,11 +198,13 @@ class LibraryRepository(
         listOf(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI)
     }
 
-    private fun scan(): List<Track> {
+    private fun baseSelection(): Pair<String, Array<String>> {
         val minMs = settings.minDurationSec * 1000L
-        val found = LinkedHashMap<Long, Track>()
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= ?"
-        val selectionArgs = arrayOf(minMs.toString())
+        return "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.DURATION} >= ?" to
+            arrayOf(minMs.toString())
+    }
+
+    private fun projection(): Array<String> {
         val base = arrayOf(
             MediaStore.Audio.Media._ID,
             MediaStore.Audio.Media.TITLE,
@@ -197,14 +220,70 @@ class LibraryRepository(
             MediaStore.Audio.Media.SIZE,
             MediaStore.Audio.Media.DISPLAY_NAME,
         )
-        val projection = if (Build.VERSION.SDK_INT >= 29) {
-            base + MediaStore.Audio.Media.RELATIVE_PATH
-        } else base
-        val order = "${MediaStore.Audio.Media.DATE_ADDED} DESC"
+        return if (Build.VERSION.SDK_INT >= 29) base + MediaStore.Audio.Media.RELATIVE_PATH else base
+    }
 
+    private fun scanDelta(existing: Map<Long, Track>): Delta {
+        if (existing.isEmpty()) return Delta(scanFull(), emptySet(), full = true)
+
+        val (selection, args) = baseSelection()
+        val ids = LinkedHashMap<Long, Long>(existing.size)
         mediaUris().forEach { collection ->
             runCatching {
-                ctx.contentResolver.query(collection, projection, selection, selectionArgs, order)?.use { c ->
+                ctx.contentResolver.query(
+                    collection,
+                    arrayOf(MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DATE_MODIFIED),
+                    selection,
+                    args,
+                    null,
+                )?.use { c ->
+                    while (c.moveToNext()) ids[c.getLong(0)] = c.getLong(1) * 1000L
+                }
+            }.onFailure { Log.w("Lo", "id sweep failed", it) }
+        }
+
+        if (ids.isEmpty()) return Delta(emptyList(), existing.keys, full = false)
+
+        val deleted = existing.keys - ids.keys
+        val changedIds = ids.filter { (id, modified) ->
+            existing[id]?.dateModified != modified
+        }.keys
+
+        if (changedIds.isEmpty()) return Delta(emptyList(), deleted, full = false)
+        // Если поменялась почти вся библиотека — дешевле перечитать целиком.
+        if (changedIds.size * 3 > ids.size) return Delta(scanFull(), emptySet(), full = true)
+
+        return Delta(fetchByIds(changedIds, selection, args), deleted, full = false)
+    }
+
+    private fun fetchByIds(ids: Collection<Long>, selection: String, args: Array<String>): List<Track> {
+        val out = ArrayList<Track>(ids.size)
+        ids.chunked(250).forEach { chunk ->
+            val placeholders = chunk.joinToString(",") { "?" }
+            val fullSelection = "($selection) AND ${MediaStore.Audio.Media._ID} IN ($placeholders)"
+            val fullArgs = args + chunk.map { it.toString() }
+            out.addAll(queryTracks(fullSelection, fullArgs))
+        }
+        return out
+    }
+
+    private fun scanFull(): List<Track> {
+        val (selection, args) = baseSelection()
+        return queryTracks(selection, args)
+    }
+
+    private fun queryTracks(selection: String, selectionArgs: Array<String>): List<Track> {
+        val found = LinkedHashMap<Long, Track>()
+        val projection = projection()
+        mediaUris().forEach { collection ->
+            runCatching {
+                ctx.contentResolver.query(
+                    collection,
+                    projection,
+                    selection,
+                    selectionArgs,
+                    "${MediaStore.Audio.Media.DATE_ADDED} DESC",
+                )?.use { c ->
                     val iId = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
                     val iTitle = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
                     val iArtist = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
@@ -231,14 +310,13 @@ class LibraryRepository(
                         val title = (c.getString(iTitle) ?: "").ifBlank {
                             fileName.substringBeforeLast('.').ifBlank { "Без названия" }
                         }
-                        val duration = c.getLong(iDur)
                         found[id] = Track(
                             id = id,
                             title = title,
                             artist = (c.getString(iArtist) ?: "").ifBlank { "Неизвестный артист" },
                             album = c.getString(iAlbum) ?: "",
                             albumId = c.getLong(iAlbumId),
-                            durationMs = duration,
+                            durationMs = c.getLong(iDur),
                             dateAdded = c.getLong(iAdded) * 1000L,
                             dateModified = c.getLong(iModified) * 1000L,
                             path = path,

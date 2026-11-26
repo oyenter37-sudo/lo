@@ -8,6 +8,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.oyenter.lo.data.Settings
 import com.oyenter.lo.ui.AppRoot
 import com.oyenter.lo.ui.theme.LoTheme
 
@@ -27,9 +29,11 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        val app = application as LoApp
         setContent {
-            LoTheme {
-                AppRoot(application as LoApp)
+            val settings by app.prefs.settings.collectAsStateWithLifecycle(initialValue = Settings())
+            LoTheme(scale = settings.uiScale) {
+                AppRoot(app)
             }
         }
         askPermissions()

@@ -124,17 +124,20 @@ fun AppRoot(app: LoApp) {
                         )
                     }
                     NavigationBar(containerColor = Bg.copy(alpha = 0.94f), tonalElevation = 0.dp) {
-                        NavItem("Библиотека", Icons.Rounded.LibraryMusic, tab == 0) {
+                        NavItem("Библиотека", Icons.Rounded.LibraryMusic, tab == 0 && !settingsOpen) {
                             tab = 0
                             detail = null
+                            settingsOpen = false
                         }
-                        NavItem("Плейлисты", Icons.Rounded.PlaylistPlay, tab == 1) {
+                        NavItem("Плейлисты", Icons.Rounded.PlaylistPlay, tab == 1 && !settingsOpen) {
                             tab = 1
                             detail = null
+                            settingsOpen = false
                         }
-                        NavItem("Избранное", Icons.Rounded.Favorite, tab == 2) {
+                        NavItem("Избранное", Icons.Rounded.Favorite, tab == 2 && !settingsOpen) {
                             tab = 2
                             detail = null
+                            settingsOpen = false
                         }
                     }
                 }

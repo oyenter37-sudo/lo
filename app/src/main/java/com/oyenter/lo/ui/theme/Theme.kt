@@ -4,7 +4,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -107,6 +110,12 @@ private val typography = Typography().run {
 }
 
 @Composable
-fun LoTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = scheme, typography = typography, content = content)
+fun LoTheme(scale: Float = 1f, content: @Composable () -> Unit) {
+    val base = LocalDensity.current
+    val safe = scale.coerceIn(0.8f, 1.35f)
+    CompositionLocalProvider(
+        LocalDensity provides Density(base.density * safe, base.fontScale),
+    ) {
+        MaterialTheme(colorScheme = scheme, typography = typography, content = content)
+    }
 }

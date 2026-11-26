@@ -79,6 +79,9 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.sin
 
+private fun isFresh(track: Track): Boolean =
+    track.dateAdded > 0 && System.currentTimeMillis() - track.dateAdded < 3L * 24 * 3600 * 1000
+
 fun formatDuration(ms: Long): String {
     if (ms <= 0) return "--:--"
     val total = ms / 1000
@@ -251,6 +254,18 @@ fun TrackRow(
                         contentDescription = null,
                         tint = Amber.copy(alpha = 0.8f),
                         modifier = Modifier.size(12.dp),
+                    )
+                }
+                if (isFresh(track)) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        "NEW",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Amber,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Amber.copy(alpha = 0.14f))
+                            .padding(horizontal = 4.dp, vertical = 1.dp),
                     )
                 }
             }

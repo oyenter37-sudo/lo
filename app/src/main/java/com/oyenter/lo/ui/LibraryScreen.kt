@@ -36,6 +36,7 @@ import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material3.CircularProgressIndicator
@@ -102,6 +103,7 @@ fun LibraryScreen(
             totalCount = totalCount,
             syncing = syncing,
             onSearch = { searchOpen = !searchOpen },
+            onShuffle = { vm.playShuffled(tracks) },
             onSettings = onOpenSettings,
         )
 
@@ -213,7 +215,13 @@ fun LibraryScreen(
 }
 
 @Composable
-private fun LibraryHeader(totalCount: Int, syncing: Boolean, onSearch: () -> Unit, onSettings: () -> Unit) {
+private fun LibraryHeader(
+    totalCount: Int,
+    syncing: Boolean,
+    onSearch: () -> Unit,
+    onShuffle: () -> Unit,
+    onSettings: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -247,6 +255,9 @@ private fun LibraryHeader(totalCount: Int, syncing: Boolean, onSearch: () -> Uni
                 strokeWidth = 2.dp,
             )
             Spacer(Modifier.width(8.dp))
+        }
+        IconButton(onClick = onShuffle) {
+            Icon(Icons.Rounded.Shuffle, contentDescription = "Вперемешку", tint = Muted)
         }
         IconButton(onClick = onSearch) {
             Icon(Icons.Rounded.Search, contentDescription = "Поиск", tint = Ink)

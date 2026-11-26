@@ -30,6 +30,7 @@ data class Settings(
     val resumeLongTracks: Boolean = true,
     val autoUpdate: Boolean = true,
     val showNewDays: Int = 7,
+    val uiScale: Float = 1f,
 )
 
 class Prefs(private val ctx: Context) {
@@ -49,6 +50,7 @@ class Prefs(private val ctx: Context) {
         val resumeLong = booleanPreferencesKey("resume_long")
         val autoUpdate = booleanPreferencesKey("auto_update")
         val showNewDays = intPreferencesKey("show_new_days")
+        val uiScale = floatPreferencesKey("ui_scale")
     }
 
     val settings: Flow<Settings> = ctx.loStore.data.map { it.toSettings() }
@@ -78,6 +80,7 @@ class Prefs(private val ctx: Context) {
             resumeLongTracks = this[K.resumeLong] ?: true,
             autoUpdate = this[K.autoUpdate] ?: true,
             showNewDays = this[K.showNewDays] ?: 7,
+            uiScale = this[K.uiScale] ?: 1f,
         )
     }
 
@@ -96,6 +99,7 @@ class Prefs(private val ctx: Context) {
         this[K.resumeLong] = s.resumeLongTracks
         this[K.autoUpdate] = s.autoUpdate
         this[K.showNewDays] = s.showNewDays
+        this[K.uiScale] = s.uiScale
     }
 
     companion object {

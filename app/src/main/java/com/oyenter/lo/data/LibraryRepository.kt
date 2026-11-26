@@ -103,11 +103,11 @@ class LibraryRepository(
 
     /** Быстрый досинк, вызывается при возврате в приложение. */
     fun onResume() {
-        if (hasPermission()) refresh()
+        if (hasPermission() && settings.autoUpdate) refresh()
     }
 
     private fun requestSync() {
-        if (!hasPermission()) return
+        if (!hasPermission() || !settings.autoUpdate) return
         scope.launch {
             kotlinx.coroutines.delay(1200)
             refresh()
@@ -115,6 +115,7 @@ class LibraryRepository(
     }
 
     fun refresh(force: Boolean = false) {
+        if (!force && !settings.autoUpdate) return
         if (!hasPermission()) {
             _permission.value = false
             _tracks.value = emptyList()

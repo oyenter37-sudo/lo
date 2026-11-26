@@ -420,6 +420,32 @@ private fun TrackMenuSheet(
             onDismiss()
         }
     }
+
+    Spacer(Modifier.height(10.dp))
+    HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+    Column(Modifier.padding(top = 10.dp)) {
+        InfoLine("Папка", track.folder.ifBlank { "—" })
+        InfoLine("Формат", track.mimeType.substringAfter('/').substringAfterLast('.').uppercase().ifBlank { "аудио" })
+        InfoLine("Размер", "%.1f МБ".format(track.size / 1024.0 / 1024.0))
+        InfoLine("Длительность", formatDuration(track.durationMs))
+        InfoLine("Прослушиваний", track.playCount.toString())
+        if (track.positionMs > 0) InfoLine("Позиция", formatDuration(track.positionMs))
+    }
+}
+
+@Composable
+private fun InfoLine(label: String, value: String) {
+    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(label, style = MaterialTheme.typography.bodySmall, color = Muted, modifier = Modifier.weight(1f))
+        Text(
+            value,
+            style = MaterialTheme.typography.bodySmall,
+            color = Ink,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1.4f),
+        )
+    }
 }
 
 @Composable

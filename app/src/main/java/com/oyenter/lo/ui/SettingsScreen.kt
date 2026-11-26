@@ -65,7 +65,39 @@ fun SettingsScreen(vm: AppVm, settings: Settings, onBack: () -> Unit) {
             Text("Настройки", style = MaterialTheme.typography.displayMedium, color = Ink)
         }
 
+        SectionLabel("Вид")
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
+            var uiScale by androidx.compose.runtime.remember(settings.uiScale) {
+                androidx.compose.runtime.mutableFloatStateOf(settings.uiScale)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Размер интерфейса", style = MaterialTheme.typography.titleMedium, color = Ink, modifier = Modifier.weight(1f))
+                Text("${(uiScale * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = Amber)
+            }
+            Slider(
+                value = uiScale,
+                onValueChange = { uiScale = it },
+                onValueChangeFinished = { vm.setUiScale(uiScale) },
+                valueRange = 0.8f..1.35f,
+                colors = SliderDefaults.colors(
+                    thumbColor = Amber,
+                    activeTrackColor = Amber,
+                    inactiveTrackColor = Surface2,
+                ),
+            )
+            Row {
+                Text("Компактно", style = MaterialTheme.typography.bodySmall, color = Faint, modifier = Modifier.weight(1f))
+                Text("Крупнее", style = MaterialTheme.typography.bodySmall, color = Faint)
+            }
+        }
+
         SectionLabel("Библиотека")
+        SettingRow(
+            title = "Обновлять автоматически",
+            subtitle = "Ловить новые и удалённые треки в фоне",
+            checked = settings.autoUpdate,
+            onChange = vm::setAutoUpdate,
+        )
         SettingRow(
             title = "Скрывать системные папки",
             subtitle = "Рингтоны, уведомления, записи, мессенджеры",

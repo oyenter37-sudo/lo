@@ -185,7 +185,8 @@ class PlayerController(private val app: Context) {
 
     private fun applyParams() {
         val (sp, pitch) = Prefs.applyPitch(speed, pitchSemi, pitchLock)
-        controller?.playbackParameters = PlaybackParameters(sp, pitch)
+        runCatching { controller?.playbackParameters = PlaybackParameters(sp, pitch) }
+            .onFailure { android.util.Log.w("Lo", "cannot apply playback params", it) }
     }
 
     // ---------- sleep timer ----------

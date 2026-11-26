@@ -192,6 +192,20 @@ class AppVm(private val app: LoApp) : ViewModel() {
         viewModelScope.launch { app.prefs.update { it.copy(accentFromCover = value) } }
     }
 
+    fun setAutoUpdate(value: Boolean) {
+        viewModelScope.launch { app.prefs.update { it.copy(autoUpdate = value) } }
+        if (value) lib.refresh(force = true)
+    }
+
+    fun setUiScale(value: Float) {
+        viewModelScope.launch { app.prefs.update { it.copy(uiScale = value.coerceIn(0.8f, 1.35f)) } }
+    }
+
+    fun playShuffled(list: List<Track>) {
+        if (list.isEmpty()) return
+        app.player.play(list.shuffled(), 0)
+    }
+
     fun setResumeLong(value: Boolean) {
         viewModelScope.launch { app.prefs.update { it.copy(resumeLongTracks = value) } }
         app.player.setResumeLong(value)

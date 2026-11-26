@@ -34,6 +34,9 @@ class LibraryRepository(
     private val _syncing = MutableStateFlow(false)
     val syncing: StateFlow<Boolean> = _syncing.asStateFlow()
 
+    private val _summary = MutableStateFlow<SyncSummary?>(null)
+    val summary: StateFlow<SyncSummary?> = _summary.asStateFlow()
+
     private val _permission = MutableStateFlow(hasPermission())
     val permission: StateFlow<Boolean> = _permission.asStateFlow()
 
@@ -136,22 +139,31 @@ class LibraryRepository(
             try {
                 val existing = withContext(Dispatchers.IO) { db.readAll().associateBy { it.id } }
                 val delta = withContext(Dispatchers.IO) { scanDelta(existing) }
-                if (delta.changed.isEmpty() && delta.deleted.isEmpty()) {
-                    _permission.value = true
+                val changedCount = if (delta.changed.isEmpty() && delta.deleted.isEmpty()) {
+                    0
                 } else {
-                    withContext(Dispatchers.IO) {
-                        if (delta.full) db.sync(delta.changed) else db.applyDelta(delta.changed, delta.deleted)
+                    val applied = withContext(Dispatchers.IO) {
+                        if (delta.full) db.sync(delta.changed)
+                        else {
+                            db.applyDelta(delta.changed, delta.deleted)
+                            delta.changed.size
+                        }
                     }
                     _tracks.value = withContext(Dispatchers.IO) { db.readAll() }
-                    _permission.value = true
+                    applied
                 }
+                _permission.value = true
                 lastSyncAt = System.currentTimeMillis()
+                _summary.value = SyncSummary(
+                    total = _tracks.value.size,
+                    changed = changedCount,
+                    deleted = delta.deleted.size,
+                    durationMs = System.currentTimeMillis() - startedAt,
+                )
             } catch (t: Throwable) {
                 Log.w("Lo", "sync failed", t)
                 _permission.value = hasPermission()
             } finally {
-                // спиннер только если реально долго
-                if (System.currentTimeMillis() - startedAt > 400) _syncing.value = false else _syncing.value = false
                 _syncing.value = false
             }
         }

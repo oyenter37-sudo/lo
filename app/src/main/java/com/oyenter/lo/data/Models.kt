@@ -67,6 +67,14 @@ enum class SmartList(val key: String, val title: String, val subtitle: String) {
     LONG("long", "Долгие", "дольше 10 минут"),
 }
 
+data class SyncSummary(
+    val total: Int,
+    val changed: Int,
+    val deleted: Int,
+    val durationMs: Long,
+    val at: Long = System.currentTimeMillis(),
+)
+
 data class PlayerUiState(
     val current: QueueItem? = null,
     val isPlaying: Boolean = false,

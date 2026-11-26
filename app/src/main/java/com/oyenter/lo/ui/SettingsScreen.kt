@@ -27,6 +27,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -208,18 +209,42 @@ fun SettingsScreen(vm: AppVm, settings: Settings, onBack: () -> Unit) {
                 Text("Если показываются чужие картинки", style = MaterialTheme.typography.bodySmall, color = Muted)
             }
         }
+        val syncing by vm.syncing.collectAsStateWithLifecycle()
+        val summary by vm.lastSync.collectAsStateWithLifecycle()
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { vm.rescan() }
+                .clickable(enabled = !syncing) { vm.rescan() }
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(Icons.Rounded.Refresh, contentDescription = null, tint = Amber, modifier = Modifier.size(18.dp))
+            if (syncing) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = Amber,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(Icons.Rounded.Refresh, contentDescription = null, tint = Amber, modifier = Modifier.size(18.dp))
+            }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text("Пересканировать библиотеку", style = MaterialTheme.typography.titleMedium, color = Ink)
-                Text("Найти новые и удалить пропавшие треки", style = MaterialTheme.typography.bodySmall, color = Muted)
+                Text(
+                    if (syncing) "Сканирую…" else "Пересканировать библиотеку",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Ink,
+                )
+                Text(
+                    if (syncing) {
+                        "Смотрю папки телефона"
+                    } else {
+                        summary?.let {
+                            "Треков: ${it.total} · изменено: ${it.changed} · ${it.durationMs} мс"
+                        } ?: "Найти новые и удалить пропавшие треки"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
             }
         }
 

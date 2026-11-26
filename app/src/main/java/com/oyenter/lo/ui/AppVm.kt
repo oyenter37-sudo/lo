@@ -41,6 +41,7 @@ class AppVm(private val app: LoApp) : ViewModel() {
 
     val tracks: StateFlow<List<Track>> = lib.tracks
     val syncing: StateFlow<Boolean> = lib.syncing
+    val lastSync: StateFlow<com.oyenter.lo.data.SyncSummary?> = lib.summary
     val hasPermission: StateFlow<Boolean> = lib.permission
     val player: StateFlow<com.oyenter.lo.data.PlayerUiState> = app.player.state
     val queue = app.player.queue
@@ -195,7 +196,10 @@ class AppVm(private val app: LoApp) : ViewModel() {
         viewModelScope.launch { app.prefs.update { it.copy(showHidden = value) } }
     }
 
-    fun rescan() = lib.refresh(force = true)
+    fun rescan() {
+        flash("Сканирую папки…")
+        lib.refresh(force = true)
+    }
 
     fun setMinDuration(seconds: Int) {
         viewModelScope.launch { app.prefs.update { it.copy(minDurationSec = seconds) } }

@@ -60,8 +60,8 @@ class PlaybackService : MediaSessionService() {
             val s = app.prefs.settings.first()
             val (speed, pitch) = Prefs.applyPitch(s.speed, s.pitchSemi, s.pitchLock)
             exo.playbackParameters = PlaybackParameters(speed, pitch)
-            eq.attach(sessionId, s.eqGains, s.preamp, s.eqEnabled)
-            EqBridge.onUpdate = { gains, pre, on -> eq.update(gains, pre, on) }
+            eq.attach(sessionId, s.eqGains, s.preamp, s.eqEnabled, Prefs.boostDb(s.extraVolume))
+            EqBridge.onUpdate = { gains, pre, on, boost -> eq.update(gains, pre, on, boost) }
         }
 
         exo.addListener(object : Player.Listener {
@@ -69,7 +69,7 @@ class PlaybackService : MediaSessionService() {
                 scope.launch {
                     delay(700)
                     val s = app.prefs.settings.first()
-                    eq.attach(audioSessionId, s.eqGains, s.preamp, s.eqEnabled)
+                    eq.attach(audioSessionId, s.eqGains, s.preamp, s.eqEnabled, Prefs.boostDb(s.extraVolume))
                 }
             }
 

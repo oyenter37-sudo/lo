@@ -47,6 +47,7 @@ class PlayerController(private val app: Context) {
     private var pitchSemi = 0
     private var pitchLock = true
     private var resumeLong = true
+    private var extraVolume = 1f
     private var sleepJob: Job? = null
     private var ticker: Job? = null
 
@@ -171,16 +172,32 @@ class PlayerController(private val app: Context) {
     }
 
     fun setEq(gains: List<Float>, preamp: Float, enabled: Boolean) {
-        runCatching { EqBridge.onUpdate?.invoke(gains, preamp, enabled) }
+        runCatching { EqBridge.onUpdate?.invoke(gains, preamp, enabled, Prefs.boostDb(extraVolume)) }
             .onFailure { android.util.Log.w("Lo", "eq bridge failed", it) }
     }
+
+    /** 0..2: до 100% — тише, выше — усиление через лимитер. */
+    fun setExtraVolume(value: Float) {
+        extraVolume = value.coerceIn(0f, 2f)
+        runCatching { controller?.volume = extraVolume.coerceAtMost(1f) }
+        runCatching { EqBridge.onUpdate?.invoke(lastGains, lastPreamp, lastEqOn, Prefs.boostDb(extraVolume)) }
+    }
+
+    private var lastGains: List<Float> = List(10) { 0f }
+    private var lastPreamp = 0f
+    private var lastEqOn = false
 
     fun applySettings(s: com.oyenter.lo.data.Settings) {
         speed = s.speed
         pitchSemi = s.pitchSemi
         pitchLock = s.pitchLock
         resumeLong = s.resumeLongTracks
+        extraVolume = s.extraVolume
+        lastGains = s.eqGains
+        lastPreamp = s.preamp
+        lastEqOn = s.eqEnabled
         applyParams()
+        runCatching { controller?.volume = extraVolume.coerceAtMost(1f) }
         setEq(s.eqGains, s.preamp, s.eqEnabled)
     }
 

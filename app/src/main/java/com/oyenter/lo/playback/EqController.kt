@@ -7,7 +7,7 @@ import android.util.Log
 
 /** Мост из UI в аудио-поток (сервис и UI в одном процессе). */
 object EqBridge {
-    var onUpdate: ((List<Float>, Float, Boolean) -> Unit)? = null
+    var onUpdate: ((List<Float>, Float, Boolean, Float) -> Unit)? = null
 }
 
 /**
@@ -27,14 +27,16 @@ class EqController {
     private var sessionId = 0
     private var gains: List<Float> = List(BANDS) { 0f }
     private var preamp = 0f
+    private var boost = 0f
     private var enabled = false
 
     var available: Boolean = true
         private set
 
-    fun attach(sid: Int, g: List<Float>, p: Float, on: Boolean) {
+    fun attach(sid: Int, g: List<Float>, p: Float, on: Boolean, volumeBoostDb: Float = 0f) {
         gains = g.take(BANDS).let { if (it.size == BANDS) it else List(BANDS) { 0f } }
         preamp = p
+        boost = volumeBoostDb
         enabled = on
         if (sid != sessionId) {
             sessionId = sid
@@ -44,9 +46,10 @@ class EqController {
         }
     }
 
-    fun update(g: List<Float>, p: Float, on: Boolean) {
+    fun update(g: List<Float>, p: Float, on: Boolean, volumeBoostDb: Float = 0f) {
         gains = g.take(BANDS).let { if (it.size == BANDS) it else List(BANDS) { 0f } }
         preamp = p
+        boost = volumeBoostDb
         enabled = on
         when {
             effect != null -> apply()
@@ -54,7 +57,7 @@ class EqController {
         }
     }
 
-    private fun needsEffect(): Boolean = enabled || preamp != 0f || gains.any { it != 0f }
+    private fun needsEffect(): Boolean = enabled || preamp != 0f || boost > 0.1f || gains.any { it != 0f }
 
     private fun rebuild() {
         val old = effect
@@ -77,6 +80,13 @@ class EqController {
             ).build()
             effect = DynamicsProcessing(0, sessionId, config)
             available = true
+            if (boost > 0.1f) {
+                runCatching {
+                    effect?.setLimiterAllChannelsTo(
+                        DynamicsProcessing.Limiter(true, true, -1f),
+                    )
+                }
+            }
             apply()
             releaseLater(old)
         } catch (t: Throwable) {
@@ -105,7 +115,7 @@ class EqController {
                     DynamicsProcessing.EqBand(true, FREQS[i].toFloat(), gains[i].coerceIn(-12f, 12f)),
                 )
             }
-            dp.setInputGainAllChannelsTo(preamp.coerceIn(-12f, 12f))
+            dp.setInputGainAllChannelsTo((preamp + boost).coerceIn(-12f, 12f))
             dp.setEnabled(enabled)
         } catch (t: Throwable) {
             Log.w("Lo", "equalizer apply failed", t)

@@ -62,6 +62,7 @@ sealed interface Detail {
 sealed interface Sheet {
     data object Sort : Sheet
     data object Equalizer : Sheet
+    data object Volume : Sheet
     data object Tuning : Sheet
     data object Queue : Sheet
     data object Sleep : Sheet
@@ -215,6 +216,7 @@ fun AppRoot(app: LoApp) {
                 onClose = { playerOpen = false },
                 onTuning = { sheet = Sheet.Tuning },
                 onEqualizer = { sheet = Sheet.Equalizer },
+                onVolume = { sheet = Sheet.Volume },
                 onQueue = { sheet = Sheet.Queue },
                 onSleep = { sheet = Sheet.Sleep },
                 onMore = { player.current?.let { q -> tracks.firstOrNull { it.id == q.id } }?.let { sheet = Sheet.TrackMenu(it) } },

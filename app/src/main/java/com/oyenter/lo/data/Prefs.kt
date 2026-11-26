@@ -32,6 +32,7 @@ data class Settings(
     val showNewDays: Int = 7,
     val uiScale: Float = 1f,
     val showHidden: Boolean = false,
+    val extraVolume: Float = 1f,
 )
 
 class Prefs(private val ctx: Context) {
@@ -53,6 +54,7 @@ class Prefs(private val ctx: Context) {
         val showNewDays = intPreferencesKey("show_new_days")
         val uiScale = floatPreferencesKey("ui_scale")
         val showHidden = booleanPreferencesKey("show_hidden")
+        val extraVolume = floatPreferencesKey("extra_volume")
     }
 
     val settings: Flow<Settings> = ctx.loStore.data.map { it.toSettings() }
@@ -84,6 +86,7 @@ class Prefs(private val ctx: Context) {
             showNewDays = this[K.showNewDays] ?: 7,
             uiScale = this[K.uiScale] ?: 1f,
             showHidden = this[K.showHidden] ?: false,
+            extraVolume = this[K.extraVolume] ?: 1f,
         )
     }
 
@@ -104,9 +107,14 @@ class Prefs(private val ctx: Context) {
         this[K.showNewDays] = s.showNewDays
         this[K.uiScale] = s.uiScale
         this[K.showHidden] = s.showHidden
+        this[K.extraVolume] = s.extraVolume
     }
 
     companion object {
+        /** 0..1 — затухание плеером, >1 — усиление через эквалайзер, дБ. */
+        fun boostDb(volume: Float): Float =
+            if (volume > 1f) (20.0 * kotlin.math.log10(volume.toDouble())).toFloat().coerceIn(0f, 6.5f) else 0f
+
         fun applyPitch(speed: Float, pitchSemi: Int, pitchLock: Boolean): Pair<Float, Float> {
             val semis = Math.pow(2.0, pitchSemi / 12.0).toFloat()
             val pitch = semis * (if (pitchLock) 1f else speed)

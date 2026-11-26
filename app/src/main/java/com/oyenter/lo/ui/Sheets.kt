@@ -120,6 +120,7 @@ fun SheetHost(
                     onChange = vm::setEq,
                 )
 
+                Sheet.Volume -> VolumeSheet(vm, settings)
                 Sheet.Queue -> QueueSheet(vm)
                 Sheet.Sleep -> SleepSheet(sleepAt > 0, vm::setSleep)
                 is Sheet.TrackMenu -> TrackMenuSheet(
@@ -283,6 +284,72 @@ private fun TuningSheet(vm: AppVm, settings: Settings) {
             vm.setSpeed(1f)
             vm.setPitchSemi(0)
         },
+    )
+}
+
+@Composable
+private fun VolumeSheet(vm: AppVm, settings: Settings) {
+    var volume by remember(settings.extraVolume) { mutableFloatStateOf(settings.extraVolume) }
+    Text("Дополнительная громкость", style = MaterialTheme.typography.headlineSmall, color = Ink)
+    Spacer(Modifier.height(2.dp))
+    Text("Сверх системной шкалы — если минимум всё равно громкий", style = MaterialTheme.typography.bodySmall, color = Muted)
+    Spacer(Modifier.height(8.dp))
+    Text(
+        "${(volume * 100).toInt()}%",
+        style = MaterialTheme.typography.displayMedium,
+        color = if (volume == 1f) Ink else Amber,
+        fontFamily = FontFamily.Monospace,
+    )
+    Slider(
+        value = volume,
+        onValueChange = {
+            volume = it
+            vm.previewExtraVolume(it)
+        },
+        onValueChangeFinished = { vm.setExtraVolume(volume) },
+        valueRange = 0f..2f,
+        colors = SliderDefaults.colors(thumbColor = Amber, activeTrackColor = Amber, inactiveTrackColor = Surface2),
+    )
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text("0%", style = MaterialTheme.typography.bodySmall, color = Faint)
+        Text("обычная", style = MaterialTheme.typography.bodySmall, color = Faint)
+        Text("200%", style = MaterialTheme.typography.bodySmall, color = Faint)
+    }
+    Spacer(Modifier.height(10.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(0.25f, 0.5f, 0.75f, 1f).forEach { preset ->
+            LoChip(
+                text = "${(preset * 100).toInt()}%",
+                selected = volume == preset,
+                onClick = {
+                    volume = preset
+                    vm.setExtraVolume(preset)
+                },
+            )
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        listOf(1.25f, 1.5f, 1.75f, 2f).forEach { preset ->
+            LoChip(
+                text = "${(preset * 100).toInt()}%",
+                selected = volume == preset,
+                onClick = {
+                    volume = preset
+                    vm.setExtraVolume(preset)
+                },
+            )
+        }
+    }
+    Spacer(Modifier.height(12.dp))
+    Text(
+        if (volume > 1f) {
+            "Выше 100% включается усиление с лимитером: громче, но без клиппинга. На очень плотных записях возможен лёгкий окрас."
+        } else {
+            "До 100% — чистое затухание на выходе, качество не страдает."
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = Faint,
     )
 }
 

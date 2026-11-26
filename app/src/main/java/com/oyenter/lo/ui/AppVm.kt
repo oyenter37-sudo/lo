@@ -156,6 +156,13 @@ class AppVm(private val app: LoApp) : ViewModel() {
         viewModelScope.launch { app.prefs.update { it.copy(pitchLock = value) } }
     }
 
+    fun setExtraVolume(value: Float) {
+        app.player.setExtraVolume(value)
+        viewModelScope.launch { app.prefs.update { it.copy(extraVolume = value.coerceIn(0f, 2f)) } }
+    }
+
+    fun previewExtraVolume(value: Float) = app.player.setExtraVolume(value)
+
     fun setEq(gains: List<Float>, preamp: Float, enabled: Boolean) {
         app.player.setEq(gains, preamp, enabled)
         viewModelScope.launch { app.prefs.update { it.copy(eqGains = gains, preamp = preamp, eqEnabled = enabled) } }

@@ -14,7 +14,9 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -35,6 +37,7 @@ import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Speed
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -82,6 +85,7 @@ fun PlayerScreen(
     onClose: () -> Unit,
     onTuning: () -> Unit,
     onEqualizer: () -> Unit,
+    onVolume: () -> Unit,
     onQueue: () -> Unit,
     onSleep: () -> Unit,
     onMore: () -> Unit,
@@ -291,8 +295,10 @@ fun PlayerScreen(
             Spacer(Modifier.height(14.dp))
 
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 LoChip(
@@ -305,6 +311,12 @@ fun PlayerScreen(
                     text = if (settings.pitchSemi == 0) "Тон" else "Тон ${if (settings.pitchSemi > 0) "+" else ""}${settings.pitchSemi}",
                     selected = settings.pitchSemi != 0,
                     onClick = onTuning,
+                )
+                LoChip(
+                    text = if (settings.extraVolume == 1f) "Громкость" else "${(settings.extraVolume * 100).toInt()}%",
+                    selected = settings.extraVolume != 1f,
+                    onClick = onVolume,
+                    leading = { Icon(Icons.Rounded.VolumeUp, null, tint = if (settings.extraVolume != 1f) Amber else Muted, modifier = Modifier.size(14.dp)) },
                 )
                 LoChip(
                     text = "EQ",

@@ -137,6 +137,34 @@ fun SettingsScreen(vm: AppVm, settings: Settings, onBack: () -> Unit) {
             onChange = vm::setPitchLock,
         )
         Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
+            var extraVolume by androidx.compose.runtime.remember(settings.extraVolume) {
+                androidx.compose.runtime.mutableFloatStateOf(settings.extraVolume)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Доп. громкость", style = MaterialTheme.typography.titleMedium, color = Ink, modifier = Modifier.weight(1f))
+                Text("${(extraVolume * 100).toInt()}%", style = MaterialTheme.typography.bodySmall, color = Amber)
+            }
+            Slider(
+                value = extraVolume,
+                onValueChange = {
+                    extraVolume = it
+                    vm.previewExtraVolume(it)
+                },
+                onValueChangeFinished = { vm.setExtraVolume(extraVolume) },
+                valueRange = 0f..2f,
+                colors = SliderDefaults.colors(
+                    thumbColor = Amber,
+                    activeTrackColor = Amber,
+                    inactiveTrackColor = Surface2,
+                ),
+            )
+            Text(
+                "0–100% тише, 100–200% громче (с лимитером)",
+                style = MaterialTheme.typography.bodySmall,
+                color = Faint,
+            )
+        }
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 6.dp)) {
             var speed by androidx.compose.runtime.remember(settings.speed) {
                 androidx.compose.runtime.mutableFloatStateOf(settings.speed)
             }

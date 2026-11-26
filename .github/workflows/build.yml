@@ -1,0 +1,73 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Resolve version
+        id: v
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            NAME="${GITHUB_REF_NAME#v}"
+          else
+            NAME="1.0.${GITHUB_RUN_NUMBER}"
+          fi
+          CODE="${NAME##*.}"
+          if ! [[ "$CODE" =~ ^[0-9]+$ ]]; then CODE="${GITHUB_RUN_NUMBER}"; fi
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "code=$CODE" >> "$GITHUB_OUTPUT"
+          echo "Build $NAME ($CODE)"
+
+      - name: Decode signing key
+        env:
+          KS: ${{ secrets.LO_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KS" ]; then echo "$KS" | base64 -d > "$RUNNER_TEMP/lo.p12"; fi
+
+      - name: Build release
+        env:
+          LO_KEYSTORE: ${{ runner.temp }}/lo.p12
+          LO_KEYSTORE_PASSWORD: ${{ secrets.LO_KEYSTORE_PASSWORD }}
+          LO_KEY_PASSWORD: ${{ secrets.LO_KEY_PASSWORD }}
+          LO_KEY_ALIAS: ${{ secrets.LO_KEY_ALIAS }}
+          VERSION_CODE: ${{ steps.v.outputs.code }}
+          VERSION_NAME: ${{ steps.v.outputs.name }}
+        run: gradle :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: lo-${{ steps.v.outputs.name }}
+          path: app/build/outputs/apk/release/*.apk
+          retention-days: 14
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.v.outputs.name }}
+          name: Lo ${{ steps.v.outputs.name }}
+          body: |
+            versionCode: ${{ steps.v.outputs.code }}
+            Собрано из ${{ github.sha }}
+          files: app/build/outputs/apk/release/*.apk

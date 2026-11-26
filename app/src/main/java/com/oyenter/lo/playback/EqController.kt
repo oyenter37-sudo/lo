@@ -78,7 +78,7 @@ class EqController {
             for (i in 0 until BANDS) {
                 dp.setPreEqBandAllChannelsTo(
                     i,
-                    DynamicsProcessing.EqBand(FREQS[i], gains[i].coerceIn(-12f, 12f)),
+                    DynamicsProcessing.EqBand(true, FREQS[i].toFloat(), gains[i].coerceIn(-12f, 12f)),
                 )
             }
             dp.setInputGainAllChannelsTo(preamp.coerceIn(-12f, 12f))

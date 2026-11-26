@@ -93,7 +93,7 @@ class Prefs(private val ctx: Context) {
         this[K.minDuration] = s.minDurationSec
         this[K.excludeSystem] = s.excludeSystem
         this[K.accentFromCover] = s.accentFromCover
-        this[K.resumeLongTracks] = s.resumeLongTracks
+        this[K.resumeLong] = s.resumeLongTracks
         this[K.autoUpdate] = s.autoUpdate
         this[K.showNewDays] = s.showNewDays
     }

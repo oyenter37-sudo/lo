@@ -83,7 +83,7 @@ class EqController {
             if (boost > 0.1f) {
                 runCatching {
                     effect?.setLimiterAllChannelsTo(
-                        DynamicsProcessing.Limiter(true, true, -1f),
+                        DynamicsProcessing.Limiter(true, true, 0, 0.005f, 0.06f, 20f, -1f, 0f),
                     )
                 }
             }

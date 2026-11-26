@@ -16,6 +16,7 @@ import com.oyenter.lo.data.PlayerUiState
 import com.oyenter.lo.data.Prefs
 import com.oyenter.lo.data.QueueItem
 import com.oyenter.lo.data.Track
+import com.oyenter.lo.widget.LoWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -52,6 +53,7 @@ class PlayerController(private val app: Context) {
     private var ticker: Job? = null
     private var paramJob: Job? = null
     private var connecting = false
+    private var widgetKey = ""
     private val pending = ArrayDeque<(MediaController) -> Unit>()
 
     private val listener = object : Player.Listener {
@@ -328,6 +330,12 @@ class PlayerController(private val app: Context) {
         }
         val count = c.mediaItemCount
         _queue.value = List(count) { c.getMediaItemAt(it).toQueueItem() }
+
+        val key = "${item?.id}:${c.isPlaying}"
+        if (key != widgetKey) {
+            widgetKey = key
+            LoWidget.refresh(app)
+        }
     }
 
     private fun Track.toMediaItem(): MediaItem {

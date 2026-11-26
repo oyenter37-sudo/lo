@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.FileDownload
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.PlaylistPlay
@@ -59,6 +60,7 @@ fun PlaylistsScreen(
     onOpen: (Long, String) -> Unit,
     onOpenSmart: (String, String) -> Unit,
     onCreate: () -> Unit,
+    onImport: () -> Unit,
 ) {
     val playlists by vm.playlists.collectAsStateWithLifecycle()
     val tracks by vm.tracks.collectAsStateWithLifecycle()
@@ -78,6 +80,9 @@ fun PlaylistsScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = Muted,
                     )
+                }
+                IconButton(onClick = onImport) {
+                    Icon(Icons.Rounded.FileDownload, contentDescription = "Импорт M3U8", tint = Muted)
                 }
                 IconButton(onClick = onCreate) {
                     Icon(Icons.Rounded.Add, contentDescription = "Создать", tint = Ink)
@@ -113,7 +118,7 @@ fun PlaylistsScreen(
                     Text("Пока пусто", style = MaterialTheme.typography.headlineSmall, color = Ink)
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Собери плейлист из любого трека: долгое нажатие → «В плейлист»",
+                        "Собери плейлист из любого трека: долгое нажатие → «В плейлист». Или импортируй файл M3U8 кнопкой сверху.",
                         style = MaterialTheme.typography.bodySmall,
                         color = Muted,
                     )

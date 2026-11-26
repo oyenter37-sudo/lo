@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_body"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_bg"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:paddingStart="16dp"
+    android:paddingEnd="10dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp">
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/widget_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:fontFamily="sans-serif-medium"
+            android:maxLines="1"
+            android:text="Lo"
+            android:textColor="#F4EDE3"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/widget_subtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="тихий плеер"
+            android:textColor="#A1968A"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <ImageButton
+        android:id="@+id/widget_prev"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@android:color/transparent"
+        android:contentDescription="Назад"
+        android:padding="9dp"
+        android:src="@drawable/ic_w_prev" />
+
+    <ImageButton
+        android:id="@+id/widget_toggle"
+        android:layout_width="44dp"
+        android:layout_height="44dp"
+        android:background="@android:color/transparent"
+        android:contentDescription="Играть или пауза"
+        android:padding="6dp"
+        android:src="@drawable/ic_w_play" />
+
+    <ImageButton
+        android:id="@+id/widget_next"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@android:color/transparent"
+        android:contentDescription="Вперёд"
+        android:padding="9dp"
+        android:src="@drawable/ic_w_next" />
+</LinearLayout>

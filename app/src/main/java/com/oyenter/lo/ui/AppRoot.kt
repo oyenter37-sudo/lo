@@ -1,6 +1,8 @@
 package com.oyenter.lo.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -37,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -96,6 +99,10 @@ fun AppRoot(app: LoApp) {
     var settingsOpen by rememberSaveable { mutableStateOf(false) }
     var sheet by remember { mutableStateOf<Sheet?>(null) }
     val snackbar = remember { SnackbarHostState() }
+    val ctx = LocalContext.current
+    val m3uPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) vm.importPlaylist(ctx, uri)
+    }
 
     LaunchedEffect(message) {
         val text = message ?: return@LaunchedEffect
@@ -189,6 +196,11 @@ fun AppRoot(app: LoApp) {
                         onOpen = { id, title -> detail = Detail.Playlist(id, title) },
                         onOpenSmart = { key, title -> detail = Detail.Smart(key, title) },
                         onCreate = { sheet = Sheet.CreatePlaylist },
+                        onImport = {
+                            runCatching {
+                                m3uPicker.launch(arrayOf("audio/x-mpegurl", "audio/mpegurl", "application/octet-stream", "text/plain", "*/*"))
+                            }
+                        },
                     )
 
                     else -> FavoritesScreen(

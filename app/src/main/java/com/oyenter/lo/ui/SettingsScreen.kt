@@ -16,7 +16,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowBackIosNew
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -27,6 +29,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -245,6 +248,61 @@ fun SettingsScreen(vm: AppVm, settings: Settings, onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = Muted,
                 )
+            }
+        }
+
+        SectionLabel("Обновления")
+        val update by vm.update.collectAsStateWithLifecycle()
+        LaunchedEffect(Unit) {
+            if (!update.checked) vm.checkForUpdate()
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = !update.checking) { vm.checkForUpdate() }
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (update.checking) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = Amber,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(Icons.Rounded.SystemUpdate, contentDescription = null, tint = Amber, modifier = Modifier.size(18.dp))
+            }
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (update.checking) "Проверяю обновления…" else "Проверить обновления",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Ink,
+                )
+                Text(
+                    when {
+                        update.checking -> "GitHub Releases"
+                        update.error -> "Не удалось связаться с GitHub"
+                        update.info != null -> "Доступна версия ${update.info!!.version} · ${update.info!!.sizeMb} МБ"
+                        update.checked -> "Версия ${BuildConfig.VERSION_NAME} — свежая"
+                        else -> "GitHub Releases"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Muted,
+                )
+            }
+            update.info?.let { info ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.clickable {
+                        vm.downloadUpdate(ctx)
+                        vm.flash("Скачиваю Lo ${info.version}…")
+                    },
+                ) {
+                    Icon(Icons.Rounded.Download, contentDescription = null, tint = Amber, modifier = Modifier.size(20.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Скачать", style = MaterialTheme.typography.titleSmall, color = Amber)
+                }
             }
         }
 

@@ -19,6 +19,7 @@ import androidx.compose.material.icons.rounded.ArrowBackIosNew
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -35,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -58,6 +60,7 @@ fun DetailScreen(
     onLongPress: (Track) -> Unit,
 ) {
     val all by vm.tracks.collectAsStateWithLifecycle()
+    val ctx = LocalContext.current
     var tracks by remember(detail) { mutableStateOf<List<Track>>(emptyList()) }
     var title by remember(detail) {
         mutableStateOf(
@@ -124,6 +127,9 @@ fun DetailScreen(
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = Muted)
             }
             if (detail is Detail.Playlist) {
+                IconButton(onClick = { vm.exportPlaylist(ctx, detail.id) }) {
+                    Icon(Icons.Rounded.Share, contentDescription = "Экспорт M3U8", tint = Muted, modifier = Modifier.size(18.dp))
+                }
                 IconButton(onClick = { showRename = true }) {
                     Icon(Icons.Rounded.Edit, contentDescription = "Переименовать", tint = Muted, modifier = Modifier.size(18.dp))
                 }

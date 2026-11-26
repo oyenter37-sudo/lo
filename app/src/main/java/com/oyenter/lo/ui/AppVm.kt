@@ -1,5 +1,8 @@
 package com.oyenter.lo.ui
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
@@ -9,8 +12,10 @@ import com.oyenter.lo.data.LoDb
 import com.oyenter.lo.data.Playlist
 import com.oyenter.lo.data.Settings
 import com.oyenter.lo.data.SmartList
+import com.oyenter.lo.data.M3u
 import com.oyenter.lo.data.SortMode
 import com.oyenter.lo.data.Track
+import com.oyenter.lo.update.UpdateChecker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -22,6 +27,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+data class UpdateUi(
+    val checking: Boolean = false,
+    val info: UpdateChecker.Info? = null,
+    val checked: Boolean = false,
+    val error: Boolean = false,
+)
 
 data class Filters(
     val query: String = "",
@@ -55,6 +67,9 @@ class AppVm(private val app: LoApp) : ViewModel() {
 
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
+
+    private val _update = MutableStateFlow(UpdateUi())
+    val update: StateFlow<UpdateUi> = _update.asStateFlow()
 
     val visible: StateFlow<List<Track>> = combine(tracks, _filters, settings) { list, f, s ->
         applyFilters(list, f, s.showHidden)
@@ -284,6 +299,80 @@ class AppVm(private val app: LoApp) : ViewModel() {
 
     suspend fun playlistName(id: Long): String =
         withContext(Dispatchers.IO) { runCatching { db.playlists().firstOrNull { it.id == id }?.name }.getOrNull() ?: "Плейлист" }
+
+    // ---------- updates ----------
+
+    fun checkForUpdate() {
+        if (_update.value.checking) return
+        viewModelScope.launch {
+            _update.value = _update.value.copy(checking = true)
+            val result = UpdateChecker.check()
+            _update.value = UpdateUi(
+                checking = false,
+                info = result.getOrNull(),
+                checked = true,
+                error = result.isFailure,
+            )
+        }
+    }
+
+    fun downloadUpdate(ctx: Context) {
+        val info = _update.value.info ?: return
+        flash(if (UpdateChecker.download(ctx, info)) "Скачивается в Загрузки" else "Не удалось начать загрузку")
+    }
+
+    // ---------- m3u ----------
+
+    fun exportPlaylist(ctx: Context, playlistId: Long) {
+        viewModelScope.launch {
+            val name = playlistName(playlistId)
+            val list = playlistTracks(playlistId)
+            if (list.isEmpty()) {
+                flash("Плейлист пуст")
+                return@launch
+            }
+            val uri = M3u.writeCacheFile(ctx, name, M3u.build(name, list))
+            if (uri == null) {
+                flash("Не получилось подготовить файл")
+                return@launch
+            }
+            runCatching {
+                val send = Intent(Intent.ACTION_SEND).apply {
+                    type = "audio/x-mpegurl"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                ctx.startActivity(Intent.createChooser(send, "Экспорт «$name»").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            }
+        }
+    }
+
+    fun importPlaylist(ctx: Context, uri: Uri) {
+        viewModelScope.launch {
+            val text = withContext(Dispatchers.IO) {
+                runCatching { ctx.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() } }.getOrNull()
+            }
+            if (text.isNullOrBlank()) {
+                flash("Не удалось прочитать файл")
+                return@launch
+            }
+            val matched = M3u.match(M3u.parse(text), tracks.value)
+            if (matched.isEmpty()) {
+                flash("В списке нет треков из этой библиотеки")
+                return@launch
+            }
+            val rawName = M3u.parse(text).firstOrNull()?.substringAfterLast('/')?.substringBeforeLast('.')
+            val name = rawName?.takeIf { it.isNotBlank() } ?: "Импорт"
+            val id = withContext(Dispatchers.IO) { runCatching { db.createPlaylist(name) }.getOrDefault(-1L) }
+            if (id <= 0) {
+                flash("Не удалось создать плейлист")
+                return@launch
+            }
+            withContext(Dispatchers.IO) { runCatching { db.addToPlaylist(id, matched.map { it.id }) } }
+            refreshPlaylists()
+            flash("Импортировано треков: ${matched.size}")
+        }
+    }
 
     // ---------- misc ----------
 

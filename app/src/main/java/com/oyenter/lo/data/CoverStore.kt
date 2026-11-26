@@ -104,7 +104,12 @@ object CoverStore {
 
     private fun save(bmp: Bitmap, file: File) {
         runCatching {
-            file.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 88, it) }
+            val tmp = File(file.parentFile, "${file.name}.tmp")
+            tmp.outputStream().use { bmp.compress(Bitmap.CompressFormat.JPEG, 88, it) }
+            if (!tmp.renameTo(file)) {
+                file.delete()
+                tmp.renameTo(file)
+            }
         }
     }
 

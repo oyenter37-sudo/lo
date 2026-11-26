@@ -194,6 +194,23 @@ fun SettingsScreen(vm: AppVm, settings: Settings, onBack: () -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .clickable {
+                    com.oyenter.lo.data.CoverStore.clear(ctx)
+                    vm.flash("Обложки перечитаются")
+                }
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Rounded.Refresh, contentDescription = null, tint = Amber, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Обновить обложки", style = MaterialTheme.typography.titleMedium, color = Ink)
+                Text("Если показываются чужие картинки", style = MaterialTheme.typography.bodySmall, color = Muted)
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
                 .clickable { vm.rescan() }
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,

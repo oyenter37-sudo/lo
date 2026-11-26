@@ -50,6 +50,9 @@ class PlayerController(private val app: Context) {
     private var extraVolume = 1f
     private var sleepJob: Job? = null
     private var ticker: Job? = null
+    private var paramJob: Job? = null
+    private var connecting = false
+    private val pending = ArrayDeque<(MediaController) -> Unit>()
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
@@ -58,76 +61,101 @@ class PlayerController(private val app: Context) {
     }
 
     fun connect() {
+        if (controller != null || connecting) return
+        connecting = true
         val token = SessionToken(app, ComponentName(app, PlaybackService::class.java))
         val future = MediaController.Builder(app, token).buildAsync()
         future.addListener({
+            connecting = false
             val c = runCatching { future.get() }.getOrNull()
             if (c == null) return@addListener
             controller = c
             c.addListener(listener)
+            runCatching { c.volume = extraVolume.coerceAtMost(1f) }
+            applyParamsNow()
+            while (pending.isNotEmpty()) {
+                runCatching { pending.removeFirst().invoke(c) }
+            }
             sync()
             startTicker()
         }, ContextCompat.getMainExecutor(app))
     }
 
+    /**
+     * Все действия идут через это: если контроллер ещё подключается,
+     * нажатие не теряется, а выполняется сразу после коннекта.
+     */
+    private fun withController(block: (MediaController) -> Unit) {
+        val c = controller
+        if (c != null) {
+            runCatching { block(c) }
+                .onFailure { android.util.Log.w("Lo", "player action failed", it) }
+        } else {
+            pending.addLast(block)
+            connect()
+        }
+    }
+
     // ---------- playback ----------
 
     fun play(tracks: List<Track>, index: Int) {
-        val c = controller ?: return
         if (tracks.isEmpty()) return
         val safeIndex = index.coerceIn(tracks.indices)
         val track = tracks[safeIndex]
         val startAt = if (resumeLong && track.isLong && track.positionMs in 5_000 until (track.durationMs - 10_000)) {
             track.positionMs
         } else 0L
-        c.setMediaItems(tracks.map { it.toMediaItem() }, safeIndex, startAt)
-        c.prepare()
-        c.play()
-    }
-
-    fun playQueue(items: List<QueueItem>, index: Int) {
-        val c = controller ?: return
-        if (items.isEmpty()) return
-        val tracks = items.map { it.fakeTrack }
-        play(tracks, index)
-    }
-
-    fun toggle() {
-        val c = controller ?: return
-        if (c.isPlaying) c.pause() else {
-            if (c.playbackState == Player.STATE_IDLE) c.prepare()
+        withController { c ->
+            c.setMediaItems(tracks.map { it.toMediaItem() }, safeIndex, startAt)
+            c.prepare()
             c.play()
         }
     }
 
-    fun next() = controller?.seekToNextMediaItem()
+    fun playQueue(items: List<QueueItem>, index: Int) {
+        if (items.isEmpty()) return
+        play(items.map { it.fakeTrack }, index)
+    }
 
-    fun previous() {
-        val c = controller ?: return
+    fun toggle() = withController { c ->
+        when {
+            c.isPlaying -> c.pause()
+            c.mediaItemCount == 0 -> Unit
+            c.playbackState == Player.STATE_ENDED -> {
+                c.seekToDefaultPosition()
+                c.play()
+            }
+            c.playbackState == Player.STATE_IDLE -> {
+                c.prepare()
+                c.play()
+            }
+            else -> c.play()
+        }
+    }
+
+    fun next() = withController { c -> c.seekToNextMediaItem() }
+
+    fun previous() = withController { c ->
         if (c.currentPosition > 3_000) c.seekTo(0) else c.seekToPreviousMediaItem()
     }
 
-    fun seekTo(positionMs: Long) = controller?.seekTo(positionMs.coerceAtLeast(0))
+    fun seekTo(positionMs: Long) = withController { c -> c.seekTo(positionMs.coerceAtLeast(0)) }
 
-    fun seekBy(deltaMs: Long) {
-        val c = controller ?: return
+    fun seekBy(deltaMs: Long) = withController { c ->
         val duration = c.duration.takeIf { it > 0 } ?: 0
         var target = (c.currentPosition + deltaMs).coerceAtLeast(0)
         if (duration > 0) target = target.coerceAtMost(duration)
         c.seekTo(target)
     }
 
-    fun playNext(track: Track) {
-        val c = controller ?: return
+    fun playNext(track: Track) = withController { c ->
         val index = if (c.mediaItemCount == 0) 0 else c.currentMediaItemIndex + 1
         c.addMediaItem(index, track.toMediaItem())
     }
 
-    fun enqueue(track: Track) {
-        controller?.addMediaItem(track.toMediaItem())
-    }
+    fun enqueue(track: Track) = withController { c -> c.addMediaItem(track.toMediaItem()) }
 
-    fun playQueueIndex(index: Int) = controller?.seekToDefaultPosition(index)
+    fun playQueueIndex(index: Int) = withController { c -> c.seekToDefaultPosition(index) }
 
     fun removeFromQueue(index: Int) {
         val c = controller ?: return
@@ -154,17 +182,27 @@ class PlayerController(private val app: Context) {
 
     fun setSpeed(value: Float) {
         speed = value.coerceIn(0.5f, 3f)
+        applyParamsNow()
+    }
+
+    fun previewSpeed(value: Float) {
+        speed = value.coerceIn(0.5f, 3f)
         applyParams()
     }
 
     fun setPitchSemi(value: Int) {
+        pitchSemi = value.coerceIn(-12, 12)
+        applyParamsNow()
+    }
+
+    fun previewPitchSemi(value: Int) {
         pitchSemi = value.coerceIn(-12, 12)
         applyParams()
     }
 
     fun setPitchLock(value: Boolean) {
         pitchLock = value
-        applyParams()
+        applyParamsNow()
     }
 
     fun setResumeLong(value: Boolean) {
@@ -196,15 +234,43 @@ class PlayerController(private val app: Context) {
         lastGains = s.eqGains
         lastPreamp = s.preamp
         lastEqOn = s.eqEnabled
-        applyParams()
+        applyParamsNow()
         runCatching { controller?.volume = extraVolume.coerceAtMost(1f) }
         setEq(s.eqGains, s.preamp, s.eqEnabled)
     }
 
+    /**
+     * Дёргать параметры на каждый пиксель слайдера нельзя: Sonic пересобирается
+     * и звук проваливается. Превью идёт с задержкой, финальное значение — сразу.
+     */
     private fun applyParams() {
+        paramJob?.cancel()
+        paramJob = scope.launch {
+            delay(60)
+            applyParamsNow()
+        }
+    }
+
+    fun applyParamsNow() {
         val (sp, pitch) = Prefs.applyPitch(speed, pitchSemi, pitchLock)
-        runCatching { controller?.playbackParameters = PlaybackParameters(sp, pitch) }
-            .onFailure { android.util.Log.w("Lo", "cannot apply playback params", it) }
+        withController { c ->
+            c.playbackParameters = PlaybackParameters(sp, pitch)
+            c.volume = extraVolume.coerceAtMost(1f)
+            kickIfStalled(c)
+        }
+    }
+
+    /** Страховка: если после смены параметров звук «провалился», подталкиваем позицию. */
+    private fun kickIfStalled(c: MediaController) {
+        val startPosition = c.currentPosition
+        scope.launch {
+            delay(1200)
+            if (!c.isPlaying) return@launch
+            val moved = kotlin.math.abs(c.currentPosition - startPosition)
+            if (moved < 40L) {
+                runCatching { c.seekTo(startPosition) }
+            }
+        }
     }
 
     // ---------- sleep timer ----------

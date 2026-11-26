@@ -3,6 +3,7 @@ package com.oyenter.lo
 import android.app.Application
 import android.os.Build
 import android.util.Log
+import com.oyenter.lo.data.CoverStore
 import com.oyenter.lo.data.LibraryRepository
 import java.io.File
 import java.text.SimpleDateFormat
@@ -40,6 +41,7 @@ class LoApp : Application() {
             }
         }
         library.startObserving()
+        appScope.launch { CoverStore.migrateLegacy(this@LoApp) }
     }
 
     /** Пишет стектрейс в Android/data/com.oyenter.lo/files — удобно прислать разработчику. */

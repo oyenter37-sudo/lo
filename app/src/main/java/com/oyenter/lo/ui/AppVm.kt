@@ -129,9 +129,9 @@ class AppVm(private val app: LoApp) : ViewModel() {
     fun previous() = app.player.previous()
     fun seekTo(ms: Long) = app.player.seekTo(ms)
 
-    fun previewSpeed(value: Float) = app.player.setSpeed(value)
+    fun previewSpeed(value: Float) = app.player.previewSpeed(value)
 
-    fun previewPitchSemi(value: Int) = app.player.setPitchSemi(value)
+    fun previewPitchSemi(value: Int) = app.player.previewPitchSemi(value)
 
     fun toggleShuffleForUi() = app.player.toggleShuffle()
 

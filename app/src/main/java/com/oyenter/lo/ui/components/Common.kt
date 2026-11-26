@@ -94,8 +94,8 @@ fun formatDuration(ms: Long): String {
 @Composable
 fun rememberCover(track: Track?): Bitmap? {
     val ctx = LocalContext.current
-    val key = track?.let { if (it.albumId > 0) it.albumId else -it.id } ?: 0L
-    val bitmap by produceState<Bitmap?>(initialValue = null, key) {
+    val key = track?.id ?: 0L
+    val bitmap by produceState<Bitmap?>(initialValue = null, key, CoverStore.version) {
         value = if (track == null) null else withContext(Dispatchers.IO) { CoverStore.load(ctx, track) }
     }
     return bitmap

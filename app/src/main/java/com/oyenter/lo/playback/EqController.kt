@@ -1,6 +1,8 @@
 package com.oyenter.lo.playback
 
 import android.media.audiofx.DynamicsProcessing
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 
 /** Мост из UI в аудио-поток (сервис и UI в одном процессе). */
@@ -21,6 +23,7 @@ class EqController {
     }
 
     private var effect: DynamicsProcessing? = null
+    private val handler = Handler(Looper.getMainLooper())
     private var sessionId = 0
     private var gains: List<Float> = List(BANDS) { 0f }
     private var preamp = 0f
@@ -33,22 +36,33 @@ class EqController {
         gains = g.take(BANDS).let { if (it.size == BANDS) it else List(BANDS) { 0f } }
         preamp = p
         enabled = on
-        sessionId = sid
-        rebuild()
+        if (sid != sessionId) {
+            sessionId = sid
+            rebuild()
+        } else {
+            apply()
+        }
     }
 
     fun update(g: List<Float>, p: Float, on: Boolean) {
         gains = g.take(BANDS).let { if (it.size == BANDS) it else List(BANDS) { 0f } }
         preamp = p
         enabled = on
-        if (effect == null && sid() > 0) rebuild() else apply()
+        when {
+            effect != null -> apply()
+            needsEffect() && sessionId > 0 -> rebuild()
+        }
     }
 
-    private fun sid() = sessionId
+    private fun needsEffect(): Boolean = enabled || preamp != 0f || gains.any { it != 0f }
 
     private fun rebuild() {
-        release()
-        if (sessionId <= 0) return
+        val old = effect
+        effect = null
+        if (!needsEffect() || sessionId <= 0) {
+            releaseLater(old)
+            return
+        }
         try {
             val config = DynamicsProcessing.Config.Builder(
                 DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
@@ -61,14 +75,24 @@ class EqController {
                 1,
                 true,
             ).build()
-            val dp = DynamicsProcessing(0, sessionId, config)
-            effect = dp
+            effect = DynamicsProcessing(0, sessionId, config)
             available = true
             apply()
+            releaseLater(old)
         } catch (t: Throwable) {
             Log.w("Lo", "equalizer unavailable", t)
             available = false
             effect = null
+            releaseLater(old)
+        }
+    }
+
+    /** Старый эффект отпускаем не сразу: аудиопоток ещё может его читать. */
+    private fun releaseLater(old: DynamicsProcessing?) {
+        if (old == null) return
+        runCatching {
+            old.setEnabled(false)
+            handler.postDelayed({ runCatching { old.release() } }, 1000)
         }
     }
 

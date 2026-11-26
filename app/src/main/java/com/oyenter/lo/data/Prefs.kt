@@ -31,6 +31,7 @@ data class Settings(
     val autoUpdate: Boolean = true,
     val showNewDays: Int = 7,
     val uiScale: Float = 1f,
+    val showHidden: Boolean = false,
 )
 
 class Prefs(private val ctx: Context) {
@@ -51,6 +52,7 @@ class Prefs(private val ctx: Context) {
         val autoUpdate = booleanPreferencesKey("auto_update")
         val showNewDays = intPreferencesKey("show_new_days")
         val uiScale = floatPreferencesKey("ui_scale")
+        val showHidden = booleanPreferencesKey("show_hidden")
     }
 
     val settings: Flow<Settings> = ctx.loStore.data.map { it.toSettings() }
@@ -81,6 +83,7 @@ class Prefs(private val ctx: Context) {
             autoUpdate = this[K.autoUpdate] ?: true,
             showNewDays = this[K.showNewDays] ?: 7,
             uiScale = this[K.uiScale] ?: 1f,
+            showHidden = this[K.showHidden] ?: false,
         )
     }
 
@@ -100,6 +103,7 @@ class Prefs(private val ctx: Context) {
         this[K.autoUpdate] = s.autoUpdate
         this[K.showNewDays] = s.showNewDays
         this[K.uiScale] = s.uiScale
+        this[K.showHidden] = s.showHidden
     }
 
     companion object {

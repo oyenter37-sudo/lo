@@ -149,6 +149,11 @@ class LibraryRepository(
         _tracks.update { list -> list.map { if (it.id == id) it.copy(favorite = favorite) else it } }
     }
 
+    fun setHidden(id: Long, hidden: Boolean) {
+        scope.launch(Dispatchers.IO) { runCatching { db.setHidden(id, hidden) } }
+        _tracks.update { list -> list.map { if (it.id == id) it.copy(hidden = hidden) else it } }
+    }
+
     fun notePlayed(id: Long) {
         scope.launch(Dispatchers.IO) { runCatching { db.recordPlay(id) } }
         val now = System.currentTimeMillis()

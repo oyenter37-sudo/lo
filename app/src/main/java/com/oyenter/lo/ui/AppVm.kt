@@ -55,8 +55,9 @@ class AppVm(private val app: LoApp) : ViewModel() {
     private val _message = MutableStateFlow<String?>(null)
     val message: StateFlow<String?> = _message.asStateFlow()
 
-    val visible: StateFlow<List<Track>> = combine(tracks, _filters) { list, f -> applyFilters(list, f) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val visible: StateFlow<List<Track>> = combine(tracks, _filters, settings) { list, f, s ->
+        applyFilters(list, f, s.showHidden)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val continueTrack: StateFlow<Track?> = tracks
         .combine(MutableStateFlow(Unit)) { list, _ -> list.filter { it.lastPlayed > 0 }.maxByOrNull { it.lastPlayed } }
@@ -104,10 +105,10 @@ class AppVm(private val app: LoApp) : ViewModel() {
 
     val folders: List<String> get() = tracks.value.map { it.folder }.filter { it.isNotBlank() }.distinct().sorted()
 
-    fun favorites(): List<Track> = tracks.value.filter { it.favorite }.sortedByDescending { it.dateAdded }
+    fun favorites(): List<Track> = tracks.value.filter { it.favorite && !it.hidden }.sortedByDescending { it.dateAdded }
 
     fun smartTracks(smart: SmartList): List<Track> {
-        val all = tracks.value
+        val all = tracks.value.filter { !it.hidden }
         val now = System.currentTimeMillis()
         return when (smart) {
             SmartList.FRESH -> all.filter { now - it.dateAdded < 7L * 24 * 3600 * 1000 }.sortedByDescending { it.dateAdded }
@@ -176,6 +177,15 @@ class AppVm(private val app: LoApp) : ViewModel() {
 
     fun toggleFavorite(track: Track) {
         lib.setFavorite(track.id, !track.favorite)
+    }
+
+    fun setHidden(track: Track, hidden: Boolean) {
+        lib.setHidden(track.id, hidden)
+        flash(if (hidden) "Скрыто. Вернуть — в меню трека" else "Снова в библиотеке")
+    }
+
+    fun setShowHidden(value: Boolean) {
+        viewModelScope.launch { app.prefs.update { it.copy(showHidden = value) } }
     }
 
     fun rescan() = lib.refresh(force = true)
@@ -274,8 +284,8 @@ class AppVm(private val app: LoApp) : ViewModel() {
         _message.value = null
     }
 
-    private fun applyFilters(list: List<Track>, f: Filters): List<Track> {
-        var result = list
+    private fun applyFilters(list: List<Track>, f: Filters, showHidden: Boolean): List<Track> {
+        var result = if (showHidden) list else list.filter { !it.hidden }
         val q = f.query.trim().lowercase()
         if (q.isNotEmpty()) {
             result = result.filter {

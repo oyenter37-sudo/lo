@@ -6,7 +6,7 @@ import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
-class LoDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "lo.db", null, 1) {
+class LoDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "lo.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -28,6 +28,7 @@ class LoDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "lo.
                 playCount INTEGER NOT NULL DEFAULT 0,
                 lastPlayed INTEGER NOT NULL DEFAULT 0,
                 favorite INTEGER NOT NULL DEFAULT 0,
+                hidden INTEGER NOT NULL DEFAULT 0,
                 positionMs INTEGER NOT NULL DEFAULT 0
             )""".trimIndent()
         )
@@ -37,7 +38,11 @@ class LoDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "lo.
         db.execSQL("CREATE TABLE playlist_tracks(playlistId INTEGER NOT NULL, trackId INTEGER NOT NULL, position INTEGER NOT NULL, PRIMARY KEY(playlistId, trackId))")
     }
 
-    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) = Unit
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            runCatching { db.execSQL("ALTER TABLE tracks ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0") }
+        }
+    }
 
     // ---------- tracks ----------
 
@@ -72,6 +77,7 @@ class LoDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "lo.
                     playCount = old.playCount,
                     lastPlayed = old.lastPlayed,
                     favorite = old.favorite,
+                    hidden = old.hidden,
                     positionMs = old.positionMs,
                 )
                 db.insertWithOnConflict("tracks", null, merged.toValues(), SQLiteDatabase.CONFLICT_REPLACE)
@@ -85,6 +91,11 @@ class LoDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "lo.
             db.endTransaction()
         }
         return changed
+    }
+
+    fun setHidden(id: Long, hidden: Boolean) {
+        val cv = ContentValues().apply { put("hidden", if (hidden) 1 else 0) }
+        writableDatabase.update("tracks", cv, "id=?", arrayOf(id.toString()))
     }
 
     fun setFavorite(id: Long, favorite: Boolean) {
@@ -214,6 +225,7 @@ class LoDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "lo.
             playCount = i("playCount"),
             lastPlayed = l("lastPlayed"),
             favorite = i("favorite") != 0,
+            hidden = i("hidden") != 0,
             positionMs = l("positionMs"),
         )
     }
@@ -236,6 +248,7 @@ class LoDb(context: Context) : SQLiteOpenHelper(context.applicationContext, "lo.
         put("playCount", playCount)
         put("lastPlayed", lastPlayed)
         put("favorite", if (favorite) 1 else 0)
+        put("hidden", if (hidden) 1 else 0)
         put("positionMs", positionMs)
     }
 }

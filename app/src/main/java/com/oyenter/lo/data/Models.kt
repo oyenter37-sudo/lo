@@ -20,6 +20,7 @@ data class Track(
     val playCount: Int = 0,
     val lastPlayed: Long = 0,
     val favorite: Boolean = false,
+    val hidden: Boolean = false,
     val positionMs: Long = 0,
 ) {
     val uri: Uri get() = Uri.parse(mediaUri)

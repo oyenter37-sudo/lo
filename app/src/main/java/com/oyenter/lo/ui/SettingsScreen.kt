@@ -111,6 +111,12 @@ fun SettingsScreen(vm: AppVm, settings: Settings, onBack: () -> Unit) {
             onChange = { on -> vm.setMinDuration(if (on) 20 else 0) },
         )
         SettingRow(
+            title = "Показывать скрытые",
+            subtitle = "Треки, убранные из меню «Скрыть»",
+            checked = settings.showHidden,
+            onChange = vm::setShowHidden,
+        )
+        SettingRow(
             title = "Акцент из обложки",
             subtitle = "Цвет интерфейса подбирается под трек",
             checked = settings.accentFromCover,

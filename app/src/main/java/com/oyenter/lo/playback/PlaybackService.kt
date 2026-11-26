@@ -67,6 +67,7 @@ class PlaybackService : MediaSessionService() {
         exo.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 scope.launch {
+                    delay(700)
                     val s = app.prefs.settings.first()
                     eq.attach(audioSessionId, s.eqGains, s.preamp, s.eqEnabled)
                 }

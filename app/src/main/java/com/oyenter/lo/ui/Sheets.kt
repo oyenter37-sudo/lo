@@ -31,6 +31,9 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -54,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
@@ -419,6 +423,26 @@ private fun TrackMenuSheet(
             onDetail(Detail.Album(track.album, track.artist))
             onDismiss()
         }
+    }
+
+    val ctx = LocalContext.current
+    MenuRow(Icons.Rounded.Share, "Поделиться файлом") {
+        runCatching {
+            val send = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = track.mimeType.ifBlank { "audio/*" }
+                putExtra(android.content.Intent.EXTRA_STREAM, track.uri)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            ctx.startActivity(android.content.Intent.createChooser(send, "Поделиться"))
+        }
+        onDismiss()
+    }
+    MenuRow(
+        if (track.hidden) Icons.Rounded.Visibility else Icons.Rounded.VisibilityOff,
+        if (track.hidden) "Вернуть в библиотеку" else "Скрыть из библиотеки",
+    ) {
+        vm.setHidden(track, !track.hidden)
+        onDismiss()
     }
 
     Spacer(Modifier.height(10.dp))

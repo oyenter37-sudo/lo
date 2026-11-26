@@ -21,6 +21,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.PlaylistPlay
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.Timer
@@ -42,6 +43,7 @@ import com.oyenter.lo.data.Playlist
 import com.oyenter.lo.data.SmartList
 import com.oyenter.lo.data.Track
 import com.oyenter.lo.ui.components.Cover
+import com.oyenter.lo.ui.components.LoChip
 import com.oyenter.lo.ui.components.SectionLabel
 import com.oyenter.lo.ui.components.TrackRow
 import com.oyenter.lo.ui.theme.Amber
@@ -224,6 +226,22 @@ fun FavoritesScreen(
         Column(Modifier.padding(start = 22.dp, end = 22.dp, top = 14.dp, bottom = 6.dp)) {
             Text("Избранное", style = MaterialTheme.typography.displayMedium, color = Ink)
             Text("${favorites.size} треков", style = MaterialTheme.typography.bodySmall, color = Muted)
+            if (favorites.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LoChip(
+                        text = "Играть всё",
+                        selected = true,
+                        onClick = { onPlay(favorites, 0) },
+                        leading = { Icon(Icons.Rounded.PlayArrow, null, tint = Amber, modifier = Modifier.size(14.dp)) },
+                    )
+                    LoChip(
+                        text = "Вперемешку",
+                        selected = false,
+                        onClick = { onPlay(favorites.shuffled(), 0) },
+                    )
+                }
+            }
         }
         if (favorites.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

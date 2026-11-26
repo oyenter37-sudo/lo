@@ -171,7 +171,8 @@ class PlayerController(private val app: Context) {
     }
 
     fun setEq(gains: List<Float>, preamp: Float, enabled: Boolean) {
-        EqBridge.onUpdate?.invoke(gains, preamp, enabled)
+        runCatching { EqBridge.onUpdate?.invoke(gains, preamp, enabled) }
+            .onFailure { android.util.Log.w("Lo", "eq bridge failed", it) }
     }
 
     fun applySettings(s: com.oyenter.lo.data.Settings) {

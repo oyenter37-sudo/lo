@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="320" viewBox="0 0 1200 320" role="img" aria-label="Lo — тихий плеер для громкого мира">
+  <defs>
+    <linearGradient id="warm" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#FBF6EE"/>
+      <stop offset="1" stop-color="#F1E7D8"/>
+    </linearGradient>
+    <linearGradient id="bars2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#D9A05B"/>
+      <stop offset="1" stop-color="#A9713A"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="320" rx="28" fill="url(#warm)"/>
+  <rect x="0.5" y="0.5" width="1199" height="319" rx="27.5" fill="none" stroke="#17130F" stroke-opacity="0.08"/>
+
+  <g transform="translate(96,96)">
+    <text x="0" y="104" font-family="Georgia, 'Times New Roman', serif" font-size="132" font-weight="bold" fill="#17130F" letter-spacing="-6">Lo</text>
+    <text x="152" y="60" font-family="Georgia, 'Times New Roman', serif" font-size="58" font-weight="bold" fill="#B87B3C">?</text>
+
+    <g transform="translate(0,140)">
+      <rect x="0" y="-6" width="7" height="12" rx="3.5" fill="url(#bars2)" opacity="0.7"/>
+      <rect x="18" y="-16" width="7" height="32" rx="3.5" fill="url(#bars2)" opacity="0.8"/>
+      <rect x="36" y="-30" width="7" height="60" rx="3.5" fill="url(#bars2)"/>
+      <rect x="54" y="-44" width="7" height="88" rx="3.5" fill="url(#bars2)"/>
+      <rect x="72" y="-24" width="7" height="48" rx="3.5" fill="url(#bars2)" opacity="0.9"/>
+      <rect x="90" y="-10" width="7" height="20" rx="3.5" fill="url(#bars2)" opacity="0.65"/>
+    </g>
+  </g>
+
+  <g transform="translate(560,118)">
+    <text x="0" y="0" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="15" letter-spacing="6" fill="#8A7E71">ТИХИЙ ПЛЕЕР</text>
+    <text x="0" y="0" dy="46" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="34" font-weight="600" fill="#17130F">для громкого мира</text>
+    <text x="0" y="0" dy="90" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="17" fill="#8A7E71">музыка по дате · скорость и тон · эквалайзер</text>
+    <g transform="translate(0,120)">
+      <rect x="0" y="0" width="196" height="44" rx="22" fill="#17130F"/>
+      <text x="98" y="29" text-anchor="middle" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="15" font-weight="700" fill="#F4EDE3">Скачать APK</text>
+      <text x="216" y="29" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="14" fill="#A1968A">Android 9+ · без сети</text>
+    </g>
+  </g>
+</svg>

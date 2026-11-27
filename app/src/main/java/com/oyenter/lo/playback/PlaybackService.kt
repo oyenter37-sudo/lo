@@ -64,6 +64,49 @@ class PlaybackService : MediaSessionService() {
             EqBridge.onUpdate = { gains, pre, on, boost -> eq.update(gains, pre, on, boost) }
         }
 
+        // Сторож: если плеер «хочет играть», но стоит на READY/BUFFERING слишком долго
+        // (залипший Sonic после смены тона), перезапускаем подготовку сами.
+        scope.launch {
+            var readyStall = 0
+            var bufferingStall = 0
+            while (isActive) {
+                delay(1_000)
+                val p = player ?: continue
+                val wants = runCatching { p.playWhenReady }.getOrDefault(false)
+                val playing = runCatching { p.isPlaying }.getOrDefault(false)
+                val state = runCatching { p.playbackState }.getOrDefault(Player.STATE_IDLE)
+                if (!wants || playing) {
+                    readyStall = 0
+                    bufferingStall = 0
+                    continue
+                }
+                when (state) {
+                    Player.STATE_READY -> {
+                        readyStall++
+                        bufferingStall = 0
+                        if (readyStall >= 2) {
+                            readyStall = 0
+                            runCatching { p.prepare() }
+                            runCatching { p.play() }
+                        }
+                    }
+                    Player.STATE_BUFFERING -> {
+                        bufferingStall++
+                        readyStall = 0
+                        if (bufferingStall >= 20) {
+                            bufferingStall = 0
+                            runCatching { p.prepare() }
+                            runCatching { p.play() }
+                        }
+                    }
+                    else -> {
+                        readyStall = 0
+                        bufferingStall = 0
+                    }
+                }
+            }
+        }
+
         exo.addListener(object : Player.Listener {
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 scope.launch {

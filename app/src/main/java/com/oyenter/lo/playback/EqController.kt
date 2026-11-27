@@ -1,9 +1,10 @@
 package com.oyenter.lo.playback
 
 import android.media.audiofx.DynamicsProcessing
-import android.os.Handler
-import android.os.Looper
 import android.util.Log
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Мост из UI в аудио-поток (сервис и UI в одном процессе). */
 object EqBridge {
@@ -12,8 +13,12 @@ object EqBridge {
 
 /**
  * 10-полосный эквалайзер через DynamicsProcessing (API 28+).
- * Живёт на аудио-сессии ExoPlayer, поэтому одинаково работает для любого формата
- * и не зависит от вендорских «улучшайзеров».
+ *
+ * ВАЖНО: все вызовы эффекта идут на отдельном потоке. DynamicsProcessing умеет
+ * подвисать при пересоздании аудиосессии (например, при смене тона), и если это
+ * случается в главном потоке сервиса, до него перестают доходить команды
+ * play/pause — кнопка «умирает» до перезапуска движка. Теперь очередь команд
+ * никогда не блокируется эффектом.
  */
 class EqController {
 
@@ -22,42 +27,69 @@ class EqController {
         const val BANDS = 10
     }
 
-    private var effect: DynamicsProcessing? = null
-    private val handler = Handler(Looper.getMainLooper())
-    private var sessionId = 0
-    private var gains: List<Float> = List(BANDS) { 0f }
-    private var preamp = 0f
-    private var boost = 0f
-    private var enabled = false
+    private val worker = Executors.newSingleThreadExecutor { r ->
+        Thread(r, "lo-eq").apply { isDaemon = true }
+    }
+    private val closer = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread(r, "lo-eq-close").apply { isDaemon = true }
+    }
 
+    private var effect: DynamicsProcessing? = null
+    private var sessionId = 0
+    @Volatile private var gains: List<Float> = List(BANDS) { 0f }
+    @Volatile private var preamp = 0f
+    @Volatile private var boost = 0f
+    @Volatile private var enabled = false
+
+    @Volatile
     var available: Boolean = true
         private set
 
+    private val drainScheduled = AtomicBoolean(false)
+    private val dirty = AtomicBoolean(false)
+
     fun attach(sid: Int, g: List<Float>, p: Float, on: Boolean, volumeBoostDb: Float = 0f) {
-        gains = g.take(BANDS).let { if (it.size == BANDS) it else List(BANDS) { 0f } }
-        preamp = p
-        boost = volumeBoostDb
-        enabled = on
-        if (sid != sessionId) {
+        store(g, p, on, volumeBoostDb)
+        worker.execute {
+            val sessionChanged = sid != sessionId
             sessionId = sid
-            rebuild()
-        } else {
-            apply()
+            if (sessionChanged) rebuild() else apply()
         }
     }
 
     fun update(g: List<Float>, p: Float, on: Boolean, volumeBoostDb: Float = 0f) {
+        store(g, p, on, volumeBoostDb)
+        // Слайдер шлёт десятки обновлений — выполняем только последнее.
+        dirty.set(true)
+        if (drainScheduled.compareAndSet(false, true)) {
+            worker.execute { drain() }
+        }
+    }
+
+    private fun store(g: List<Float>, p: Float, on: Boolean, volumeBoostDb: Float) {
         gains = g.take(BANDS).let { if (it.size == BANDS) it else List(BANDS) { 0f } }
         preamp = p
         boost = volumeBoostDb
         enabled = on
+    }
+
+    private fun drain() {
+        drainScheduled.set(false)
+        if (!dirty.compareAndSet(true, false)) return
         when {
+            !needsEffect() -> {
+                // Эффект больше не нужен — отпускаем, чтобы лимитер не висел в цепи.
+                val old = effect
+                effect = null
+                releaseLater(old)
+            }
             effect != null -> apply()
-            needsEffect() && sessionId > 0 -> rebuild()
+            sessionId > 0 -> rebuild()
         }
     }
 
-    private fun needsEffect(): Boolean = enabled || preamp != 0f || boost > 0.1f || gains.any { it != 0f }
+    private fun needsEffect(): Boolean =
+        enabled || preamp != 0f || boost > 0.1f || gains.any { it != 0f }
 
     private fun rebuild() {
         val old = effect
@@ -100,10 +132,8 @@ class EqController {
     /** Старый эффект отпускаем не сразу: аудиопоток ещё может его читать. */
     private fun releaseLater(old: DynamicsProcessing?) {
         if (old == null) return
-        runCatching {
-            old.setEnabled(false)
-            handler.postDelayed({ runCatching { old.release() } }, 1000)
-        }
+        runCatching { old.setEnabled(false) }
+        closer.schedule({ runCatching { old.release() } }, 1, TimeUnit.SECONDS)
     }
 
     private fun apply() {
@@ -123,8 +153,13 @@ class EqController {
         }
     }
 
+    /** Полный сброс — вызывается при аварийном перезапуске движка. */
     fun release() {
-        runCatching { effect?.release() }
-        effect = null
+        worker.execute {
+            val old = effect
+            effect = null
+            runCatching { old?.setEnabled(false) }
+            runCatching { old?.release() }
+        }
     }
 }

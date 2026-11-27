@@ -63,6 +63,7 @@ class PlayerController(private val app: Context) {
     private var connecting = false
     private var widgetKey = ""
     private var stuckTicks = 0
+    private var appliedParams: PlaybackParameters? = null
     private val pending = ArrayDeque<(MediaController) -> Unit>()
 
     /** Контроллер жив? После смерти сервиса старый объект навсегда остаётся «мёртвым». */
@@ -73,11 +74,22 @@ class PlayerController(private val app: Context) {
         runCatching { c.removeListener(listener) }
         runCatching { c.release() }
         if (controller === c) controller = null
+        appliedParams = null
     }
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             sync()
+            // Параметры могли не примениться, пока плеер был IDLE/буферизовался.
+            runCatching {
+                if (player.playbackState == Player.STATE_READY || player.isPlaying) {
+                    val desired = params()
+                    if (appliedParams != desired) {
+                        player.playbackParameters = desired
+                        appliedParams = desired
+                    }
+                }
+            }
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -102,6 +114,7 @@ class PlayerController(private val app: Context) {
                 return@addListener
             }
             controller = c
+            appliedParams = null
             c.addListener(listener)
             runCatching { c.volume = extraVolume.coerceAtMost(1f) }
             applyParamsNow()
@@ -164,6 +177,7 @@ class PlayerController(private val app: Context) {
         ticker?.cancel()
         ticker = null
         paramJob?.cancel()
+        appliedParams = null
         pending.clear()
         _state.value = PlayerUiState()
         _queue.value = emptyList()
@@ -196,8 +210,9 @@ class PlayerController(private val app: Context) {
     }
 
     fun toggle() = withController { c ->
-        // isPlaying ложно ещё и во время буферизации. Если ориентироваться на него,
-        // пауза на переключении трека превращается в повторный play() и «не работает».
+        // Ориентируемся сразу на два признака: isPlaying ложно во время буферизации,
+        // а playWhenReady может рассинхрониться после Sonic. Иначе кнопка «умирает».
+        val wantsPause = runCatching { c.playWhenReady || c.isPlaying }.getOrDefault(false)
         when {
             c.mediaItemCount == 0 -> Unit
             c.playbackState == Player.STATE_ENDED -> {
@@ -209,8 +224,22 @@ class PlayerController(private val app: Context) {
                 c.prepare()
                 c.play()
             }
-            c.playWhenReady -> c.pause()
+            wantsPause -> {
+                c.pause()
+                // Если команда потерялась, повторяем один раз.
+                scope.launch {
+                    delay(800)
+                    if (isAlive(c) && runCatching { c.isPlaying }.getOrDefault(false)) {
+                        runCatching { c.pause() }
+                    }
+                }
+            }
             else -> c.play()
+        }
+        // Даже если события от сессии задержались, интерфейс не должен врать.
+        scope.launch {
+            delay(180)
+            sync()
         }
     }
 
@@ -336,24 +365,36 @@ class PlayerController(private val app: Context) {
     }
 
     fun applyParamsNow() {
-        val (sp, pitch) = Prefs.applyPitch(speed, pitchSemi, pitchLock)
+        val desired = params()
         withController { c ->
-            c.playbackParameters = PlaybackParameters(sp, pitch)
-            c.volume = extraVolume.coerceAtMost(1f)
+            if (appliedParams != desired) {
+                c.playbackParameters = desired
+                appliedParams = desired
+            }
             kickIfStalled(c)
         }
     }
 
-    /** Страховка: если после смены параметров звук «провалился», подталкиваем позицию. */
+    private fun params(): PlaybackParameters {
+        val (sp, pitch) = Prefs.applyPitch(speed, pitchSemi, pitchLock)
+        return PlaybackParameters(sp, pitch)
+    }
+
+    /**
+     * Страховка после смены параметров: Sonic иногда «проглатывает» старт.
+     * Не seek'аем (это только усугубляло залипание), а мягко перезапускаем подготовку.
+     */
     private fun kickIfStalled(c: MediaController) {
-        val startPosition = runCatching { c.currentPosition }.getOrDefault(0L)
         scope.launch {
-            delay(1200)
-            val playing = runCatching { c.isPlaying }.getOrDefault(false)
-            if (!playing) return@launch
-            val now = runCatching { c.currentPosition }.getOrDefault(startPosition)
-            if (kotlin.math.abs(now - startPosition) < 40L) {
-                runCatching { c.seekTo(startPosition) }
+            delay(1500)
+            if (!isAlive(c)) return@launch
+            val wantsPlay = runCatching { c.playWhenReady }.getOrDefault(false)
+            val playing = runCatching { c.isPlaying }.getOrDefault(true)
+            val ready = runCatching { c.playbackState }.getOrDefault(Player.STATE_IDLE) ==
+                Player.STATE_READY
+            if (wantsPlay && !playing && ready) {
+                runCatching { c.prepare() }
+                runCatching { c.play() }
             }
         }
     }

@@ -32,8 +32,13 @@ jobs:
           else
             NAME="1.0.${GITHUB_RUN_NUMBER}"
           fi
-          CODE="${NAME##*.}"
-          if ! [[ "$CODE" =~ ^[0-9]+$ ]]; then CODE="${GITHUB_RUN_NUMBER}"; fi
+          IFS='.' read -r MAJ MIN PATCH <<< "$NAME"
+          MAJ="${MAJ:-0}"; MIN="${MIN:-0}"; PATCH="${PATCH:-0}"
+          if [[ "$MAJ" =~ ^[0-9]+$ && "$MIN" =~ ^[0-9]+$ && "$PATCH" =~ ^[0-9]+$ ]]; then
+            CODE=$(( MAJ * 10000 + MIN * 100 + PATCH ))
+          else
+            CODE="${GITHUB_RUN_NUMBER}"
+          fi
           echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "code=$CODE" >> "$GITHUB_OUTPUT"
           echo "Build $NAME ($CODE)"

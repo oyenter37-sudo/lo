@@ -20,6 +20,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.RestartAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -303,6 +304,21 @@ fun SettingsScreen(vm: AppVm, settings: Settings, onBack: () -> Unit) {
                     Spacer(Modifier.width(6.dp))
                     Text("Скачать", style = MaterialTheme.typography.titleSmall, color = Amber)
                 }
+            }
+        }
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { vm.hardResetPlayer() }
+                .padding(horizontal = 20.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(Icons.Rounded.RestartAlt, contentDescription = null, tint = Amber, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text("Перезапустить плеер", style = MaterialTheme.typography.titleMedium, color = Ink)
+                Text("Если кнопки паузы и переключения не реагируют", style = MaterialTheme.typography.bodySmall, color = Muted)
             }
         }
 

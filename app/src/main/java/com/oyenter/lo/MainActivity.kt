@@ -42,7 +42,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        (application as LoApp).library.onResume()
+        val app = application as LoApp
+        app.library.onResume()
+        // Если сессия потерялась или плеер застрял, пока приложение было свёрнуто.
+        app.player.ensureHealthy()
     }
 
     private fun askPermissions() {

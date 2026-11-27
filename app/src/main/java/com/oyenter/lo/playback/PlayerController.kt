@@ -2,11 +2,13 @@ package com.oyenter.lo.playback
 
 import android.content.ComponentName
 import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -43,6 +45,13 @@ class PlayerController(private val app: Context) {
     private val _sleepEndsAt = MutableStateFlow(0L)
     val sleepEndsAt: StateFlow<Long> = _sleepEndsAt.asStateFlow()
 
+    private val _error = MutableStateFlow<String?>(null)
+    val error: StateFlow<String?> = _error.asStateFlow()
+
+    fun consumeError() {
+        _error.value = null
+    }
+
     private var speed = 1f
     private var pitchSemi = 0
     private var pitchLock = true
@@ -53,11 +62,26 @@ class PlayerController(private val app: Context) {
     private var paramJob: Job? = null
     private var connecting = false
     private var widgetKey = ""
+    private var stuckTicks = 0
     private val pending = ArrayDeque<(MediaController) -> Unit>()
+
+    /** Контроллер жив? После смерти сервиса старый объект навсегда остаётся «мёртвым». */
+    private fun isAlive(c: MediaController): Boolean =
+        runCatching { c.isConnected }.getOrDefault(false)
+
+    private fun drop(c: MediaController) {
+        runCatching { c.removeListener(listener) }
+        runCatching { c.release() }
+        if (controller === c) controller = null
+    }
 
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) {
             sync()
+        }
+
+        override fun onPlayerError(error: PlaybackException) {
+            _error.value = "Не удалось воспроизвести: ${error.errorCodeName}"
         }
     }
 
@@ -69,7 +93,14 @@ class PlayerController(private val app: Context) {
         future.addListener({
             connecting = false
             val c = runCatching { future.get() }.getOrNull()
-            if (c == null) return@addListener
+            if (c == null) {
+                // Сервис мог ещё не подняться — пробуем чуть позже, иначе кнопки «умирают».
+                scope.launch {
+                    delay(1_000)
+                    if (controller == null) connect()
+                }
+                return@addListener
+            }
             controller = c
             c.addListener(listener)
             runCatching { c.volume = extraVolume.coerceAtMost(1f) }
@@ -88,11 +119,57 @@ class PlayerController(private val app: Context) {
      */
     private fun withController(block: (MediaController) -> Unit) {
         val c = controller
-        if (c != null) {
+        if (c != null && isAlive(c)) {
             runCatching { block(c) }
-                .onFailure { android.util.Log.w("Lo", "player action failed", it) }
-        } else {
-            pending.addLast(block)
+                .onFailure {
+                    android.util.Log.w("Lo", "player action failed", it)
+                    // Мёртвый контроллер не должен блокировать плеер до перезапуска.
+                    if (!isAlive(c)) reconnect()
+                }
+            return
+        }
+        if (c != null) drop(c)
+        while (pending.size > 16) pending.removeFirst()
+        pending.addLast(block)
+        connect()
+    }
+
+    /** Пересоздаёт контроллер и повторяет отложенные действия. */
+    fun reconnect() {
+        val old = controller
+        controller = null
+        if (old != null) drop(old)
+        connecting = false
+        connect()
+    }
+
+    /**
+     * Лечение залипшего состояния: ошибка подготовки, стоп в буферизации,
+     * потерянная сессия. Вызывается при возврате в приложение.
+     */
+    fun ensureHealthy() {
+        val c = controller
+        if (c == null) { connect(); return }
+        if (!isAlive(c)) { reconnect(); return }
+        val failed = runCatching { c.playerError != null }.getOrDefault(false)
+        if (failed) runCatching { c.prepare() }
+    }
+
+    /** Полный перезапуск аудиодвижка — последняя линия обороны, если кнопки не оживают. */
+    fun hardReset() {
+        val old = controller
+        controller = null
+        if (old != null) drop(old)
+        connecting = false
+        ticker?.cancel()
+        ticker = null
+        paramJob?.cancel()
+        pending.clear()
+        _state.value = PlayerUiState()
+        _queue.value = emptyList()
+        runCatching { app.stopService(Intent(app, PlaybackService::class.java)) }
+        scope.launch {
+            delay(500)
             connect()
         }
     }
@@ -119,22 +196,31 @@ class PlayerController(private val app: Context) {
     }
 
     fun toggle() = withController { c ->
+        // isPlaying ложно ещё и во время буферизации. Если ориентироваться на него,
+        // пауза на переключении трека превращается в повторный play() и «не работает».
         when {
-            c.isPlaying -> c.pause()
             c.mediaItemCount == 0 -> Unit
             c.playbackState == Player.STATE_ENDED -> {
                 c.seekToDefaultPosition()
+                c.prepare()
                 c.play()
             }
             c.playbackState == Player.STATE_IDLE -> {
                 c.prepare()
                 c.play()
             }
+            c.playWhenReady -> c.pause()
             else -> c.play()
         }
     }
 
     fun next() = withController { c -> c.seekToNextMediaItem() }
+
+    /** Принудительно перезапустить текущий трек (помогает при залипшем буфере). */
+    fun retry() = withController { c ->
+        runCatching { c.prepare() }
+        runCatching { c.play() }
+    }
 
     fun previous() = withController { c ->
         if (c.currentPosition > 3_000) c.seekTo(0) else c.seekToPreviousMediaItem()
@@ -158,18 +244,15 @@ class PlayerController(private val app: Context) {
 
     fun playQueueIndex(index: Int) = withController { c -> c.seekToDefaultPosition(index) }
 
-    fun removeFromQueue(index: Int) {
-        val c = controller ?: return
+    fun removeFromQueue(index: Int) = withController { c ->
         if (index in 0 until c.mediaItemCount) c.removeMediaItem(index)
     }
 
-    fun toggleShuffle() {
-        val c = controller ?: return
+    fun toggleShuffle() = withController { c ->
         c.shuffleModeEnabled = !c.shuffleModeEnabled
     }
 
-    fun cycleRepeat() {
-        val c = controller ?: return
+    fun cycleRepeat() = withController { c ->
         c.repeatMode = when (c.repeatMode) {
             Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
             Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
@@ -177,7 +260,7 @@ class PlayerController(private val app: Context) {
         }
     }
 
-    fun stop() = controller?.stop()
+    fun stop() = withController { c -> c.stop() }
 
     // ---------- tuning ----------
 
@@ -263,12 +346,13 @@ class PlayerController(private val app: Context) {
 
     /** Страховка: если после смены параметров звук «провалился», подталкиваем позицию. */
     private fun kickIfStalled(c: MediaController) {
-        val startPosition = c.currentPosition
+        val startPosition = runCatching { c.currentPosition }.getOrDefault(0L)
         scope.launch {
             delay(1200)
-            if (!c.isPlaying) return@launch
-            val moved = kotlin.math.abs(c.currentPosition - startPosition)
-            if (moved < 40L) {
+            val playing = runCatching { c.isPlaying }.getOrDefault(false)
+            if (!playing) return@launch
+            val now = runCatching { c.currentPosition }.getOrDefault(startPosition)
+            if (kotlin.math.abs(now - startPosition) < 40L) {
                 runCatching { c.seekTo(startPosition) }
             }
         }
@@ -299,12 +383,33 @@ class PlayerController(private val app: Context) {
         ticker = scope.launch {
             while (isActive) {
                 val c = controller
-                if (c != null && c.isPlaying) {
-                    _state.update {
-                        it.copy(
-                            positionMs = c.currentPosition.coerceAtLeast(0),
-                            durationMs = if (c.duration > 0) c.duration else it.durationMs,
-                        )
+                if (c != null && !isAlive(c)) {
+                    reconnect()
+                    delay(500)
+                    continue
+                }
+                if (c != null) {
+                    val playing = runCatching { c.isPlaying }.getOrDefault(false)
+                    if (playing) {
+                        _state.update {
+                            it.copy(
+                                positionMs = c.currentPosition.coerceAtLeast(0),
+                                durationMs = if (c.duration > 0) c.duration else it.durationMs,
+                            )
+                        }
+                    }
+                    // Застряли в буферизации при playWhenReady — сами подталкиваем prepare().
+                    val buffering = runCatching { c.playbackState }.getOrDefault(Player.STATE_IDLE) ==
+                        Player.STATE_BUFFERING
+                    val wantsPlay = runCatching { c.playWhenReady }.getOrDefault(false)
+                    if (wantsPlay && !playing && buffering) {
+                        stuckTicks++
+                        if (stuckTicks >= 20) {
+                            stuckTicks = 0
+                            runCatching { c.prepare() }
+                        }
+                    } else {
+                        stuckTicks = 0
                     }
                 }
                 delay(300)

@@ -88,6 +88,19 @@ class AppVm(private val app: LoApp) : ViewModel() {
             tracks.collect { refreshPlaylists() }
         }
         refreshPlaylists()
+        viewModelScope.launch {
+            app.player.error.collect { msg ->
+                if (msg != null) {
+                    flash(msg)
+                    app.player.consumeError()
+                }
+            }
+        }
+    }
+
+    fun hardResetPlayer() {
+        app.player.hardReset()
+        flash("Аудиодвижок перезапущен")
     }
 
     fun refreshPlaylists() {
